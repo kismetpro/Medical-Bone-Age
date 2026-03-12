@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-21 22:54:31",
+  "method": "email",
+  "recipient": "2633009812@qq.com",
+  "report_id": "1771685655707",
+  "status": "failed",
+  "error": "邮件发送失败: Connection unexpectedly closed",
+  "remarks": "你好",
+  "report_summary": {
+    "gender": "male",
+    "predicted_age_years": 14.9,
+    "predicted_age_months": 178.76,
+    "predicted_adult_height": null
+  }
+}

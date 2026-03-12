@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-25 15:43:06",
+  "method": "email",
+  "recipient": "2633009812@qq.com",
+  "report_id": "1772005123608",
+  "status": "success",
+  "error": "",
+  "remarks": "三个月后随访",
+  "report_summary": {
+    "gender": "male",
+    "predicted_age_years": 14.9,
+    "predicted_age_months": 178.76,
+    "predicted_adult_height": 186.3
+  }
+}

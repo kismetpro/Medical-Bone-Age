@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-21 23:00:59",
+  "method": "email",
+  "recipient": "2633009812@qq.com",
+  "report_id": "1771686054905",
+  "status": "failed",
+  "error": "邮件发送失败: Traceback (most recent call last):\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 89, in <module>\n    main()\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 85, in main\n    send_with_attempts(msg, sender, password, host, port)\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 65, in send_with_attempts\n    raise RuntimeError(\" ; \".join(errors))\nRuntimeError: smtp.qq.com:587 ssl=False tls=True -> Connection unexpectedly closed ; smtp.qq.com:587 ssl=True tls=False -> [SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1010) ; smtp.qq.com:465 ssl=True tls=False -> Connection unexpectedly closed ; smtp.qq.com:25 ssl=False tls=True -> Connection unexpectedly closed",
+  "remarks": "你好",
+  "report_summary": {
+    "gender": "male",
+    "predicted_age_years": 14.9,
+    "predicted_age_months": 178.76,
+    "predicted_adult_height": null
+  }
+}

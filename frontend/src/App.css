@@ -1,0 +1,16 @@
+.app-main-layout {
+  min-height: 100vh;
+}
+
+.spin {
+  animation: app-spin 0.9s linear infinite;
+}
+
+@keyframes app-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,49 @@
+:root {
+  --bg-0: #fdf6ec;
+  --bg-1: #eef4ff;
+  --surface: #ffffff;
+  --surface-soft: #f7f9fc;
+  --line: #dfe6f1;
+  --text-strong: #14213d;
+  --text-muted: #516079;
+  --brand: #e26d3a;
+  --brand-2: #1d4ed8;
+  --ok: #0f9d7a;
+  --danger: #d03b56;
+  --radius-xl: 20px;
+  --radius-lg: 14px;
+  --shadow-soft: 0 16px 34px -24px rgba(20, 33, 61, 0.35);
+  --shadow-card: 0 14px 28px -18px rgba(20, 33, 61, 0.28);
+  font-family: "Manrope", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text-strong);
+  background:
+    radial-gradient(1200px 500px at -15% -20%, rgba(226, 109, 58, 0.18), transparent 55%),
+    radial-gradient(900px 500px at 120% 0%, rgba(29, 78, 216, 0.18), transparent 55%),
+    linear-gradient(130deg, var(--bg-0), var(--bg-1));
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

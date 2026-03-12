@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>用户提问中心</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #059669;
+      --danger: #dc2626;
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --line: #dbe4f0;
+      --text: #0f172a;
+      --sub: #475569;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Microsoft YaHei", sans-serif; }
+    body { background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 100%); color: var(--text); padding: 20px; }
+    .container { max-width: 920px; margin: 0 auto; background: var(--card); border-radius: 14px; box-shadow: 0 8px 26px rgba(0,0,0,.08); padding: 26px; }
+    .top-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+    h2 { font-size: 24px; }
+    .muted-link { color: var(--primary); text-decoration: none; font-size: 14px; }
+    .muted-link:hover { text-decoration: underline; }
+    .auth-card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: #f8fbff; }
+    .auth-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab-btn { border: 1px solid var(--line); background: #fff; color: var(--sub); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+    .tab-btn.active { border-color: var(--primary); background: #eaf1ff; color: var(--primary); font-weight: 600; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; margin-bottom: 6px; color: var(--sub); font-size: 14px; }
+    .field input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 14px; }
+    .hint { font-size: 12px; color: #64748b; margin-top: 6px; }
+    .btn { border: none; border-radius: 8px; cursor: pointer; padding: 10px 18px; font-size: 14px; font-weight: 600; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-outline { border: 1px solid #94a3b8; background: #fff; color: #334155; }
+    .btn-outline:hover { background: #f1f5f9; }
+    .hidden { display: none !important; }
+    .status { margin-top: 10px; font-size: 13px; color: #0f766e; }
+    .error { color: #b91c1c; }
+    .user-bar { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+    .upload-box { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: #fbfdff; margin-bottom: 22px; }
+    #imageInput { margin-bottom: 12px; width: 100%; }
+    #preview { width: 100%; min-height: 210px; border: 2px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin: 10px 0 14px; padding: 8px; }
+    #preview img { max-width: 100%; max-height: 220px; display: none; border-radius: 6px; }
+    #preview span { color: #64748b; font-size: 14px; }
+    #questionText { width: 100%; height: 96px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; resize: none; font-size: 14px; margin-bottom: 12px; }
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 14px; }
+    .question-item { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; background: #fff; }
+    .question-header { display: flex; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+    .question-time { font-size: 12px; color: #64748b; }
+    .question-status { font-size: 12px; padding: 4px 8px; border-radius: 999px; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-replied { background: #dcfce7; color: #166534; }
+    .question-img { max-width: 100%; max-height: 260px; border-radius: 8px; object-fit: contain; margin: 10px 0; }
+    .question-text { background: #f8fafc; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.6; margin-bottom: 8px; }
+    .reply-text { background: #eaf1ff; border-left: 4px solid var(--primary); border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.6; color: #1e3a8a; }
+    .empty { text-align: center; color: #64748b; padding: 28px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-title">
+      <h2>用户提问中心</h2>
+      <a class="muted-link" href="/qa-admin.html">去管理员回复中心</a>
+    </div>
+
+    <div id="authCard" class="auth-card">
+      <div class="auth-tabs">
+        <button class="tab-btn active" id="tabLogin">登录</button>
+        <button class="tab-btn" id="tabRegister">注册</button>
+      </div>
+
+      <div id="loginPanel">
+        <div class="field">
+          <label>用户名</label>
+          <input id="loginUsername" placeholder="请输入用户名">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input id="loginPassword" type="password" placeholder="请输入密码">
+        </div>
+        <button class="btn btn-primary" id="loginBtn">登录用户端</button>
+      </div>
+
+      <div id="registerPanel" class="hidden">
+        <div class="field">
+          <label>用户名</label>
+          <input id="regUsername" placeholder="3-64位，建议英文或数字">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input id="regPassword" type="password" placeholder="至少8位，含大小写字母和数字">
+        </div>
+        <div class="field">
+          <label>确认密码</label>
+          <input id="regPassword2" type="password" placeholder="再次输入密码">
+        </div>
+        <button class="btn btn-primary" id="registerBtn">注册并登录用户端</button>
+        <div class="hint">账号信息将通过不可逆哈希（PBKDF2）存储在后端数据库。</div>
+      </div>
+      <div id="authStatus" class="status"></div>
+    </div>
+
+    <div id="appShell" class="hidden">
+      <div class="user-bar">
+        <div>当前用户：<strong id="currentUser">-</strong></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a class="muted-link" href="/qa-admin.html">管理员端</a>
+          <button class="btn btn-danger" id="logoutBtn">退出登录</button>
+        </div>
+      </div>
+
+      <div class="upload-box">
+        <input type="file" id="imageInput" accept="image/*">
+        <div id="preview">
+          <img id="previewImg">
+          <span>点击上方选择图片（支持 jpg/png/webp）</span>
+        </div>
+        <textarea id="questionText" placeholder="请详细描述您的问题..."></textarea>
+        <button class="btn btn-primary" id="submitBtn">提交问题</button>
+      </div>
+
+      <div class="filter-bar">
+        <button class="btn btn-outline" id="filterAll">全部问题</button>
+        <button class="btn btn-outline" id="filterPending">未回复</button>
+        <button class="btn btn-outline" id="filterReplied">已回复</button>
+        <button class="btn btn-danger" id="clearAllBtn">清空全部问题</button>
+      </div>
+
+      <div id="questionList"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
+    const ROLE = "user";
+    let currentFilter = "all";
+    let imageBase64 = null;
+    let questionCache = [];
+
+    const authCard = document.getElementById("authCard");
+    const appShell = document.getElementById("appShell");
+    const authStatus = document.getElementById("authStatus");
+    const currentUser = document.getElementById("currentUser");
+    const tabLogin = document.getElementById("tabLogin");
+    const tabRegister = document.getElementById("tabRegister");
+    const loginPanel = document.getElementById("loginPanel");
+    const registerPanel = document.getElementById("registerPanel");
+
+    function setStatus(msg, isError = false) {
+      authStatus.textContent = msg || "";
+      authStatus.classList.toggle("error", !!isError);
+    }
+
+    function setAuthView(mode) {
+      const login = mode === "login";
+      tabLogin.classList.toggle("active", login);
+      tabRegister.classList.toggle("active", !login);
+      loginPanel.classList.toggle("hidden", !login);
+      registerPanel.classList.toggle("hidden", login);
+      setStatus("");
+    }
+
+    async function postJson(path, payload = {}) {
+      const resp = await fetch(API_BASE + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload || {})
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || data.message || "请求失败");
+      return data;
+    }
+
+    async function getJson(path) {
+      const resp = await fetch(API_BASE + path, {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || data.message || "请求失败");
+      return data;
+    }
+
+    async function deleteJson(path) {
+      const resp = await fetch(API_BASE + path, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || data.message || "请求失败");
+      return data;
+    }
+
+    async function verifyAndEnter() {
+      try {
+        const info = await postJson("/auth/verify", {});
+        if (info.role !== ROLE) {
+          alert("当前账号不是用户角色，即将跳转到管理员登录页。");
+          location.href = "/qa-admin.html";
+          return;
+        }
+        currentUser.textContent = info.username;
+        await showApp();
+      } catch {
+        showAuth();
+      }
+    }
+
+    function showAuth() {
+      authCard.classList.remove("hidden");
+      appShell.classList.add("hidden");
+    }
+
+    async function showApp() {
+      authCard.classList.add("hidden");
+      appShell.classList.remove("hidden");
+      activateFilterBtn("all");
+      await refreshQuestions();
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function isStrongPassword(pwd) {
+      return /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /\d/.test(pwd) && pwd.length >= 8;
+    }
+
+    function isValidUsername(username) {
+      return /^[A-Za-z0-9_.-]{3,64}$/.test(username);
+    }
+
+    function normalizeAuthError(err) {
+      const raw = String((err && err.message) || "请求失败");
+      if (raw.includes("Too many requests")) return "登录尝试过多，请5分钟后再试";
+      if (raw.includes("Invalid username or password")) return "账号或密码错误";
+      if (raw.includes("Username format invalid")) return "用户名格式错误：仅支持3-64位字母/数字/_.-";
+      if (raw.includes("Password must include")) return "密码格式错误：至少8位，且包含大小写字母和数字";
+      if (raw.includes("Not authenticated")) return "未登录或会话失效，请重新登录";
+      return raw;
+    }
+
+    async function refreshQuestions() {
+      const data = await getJson("/qa/questions");
+      questionCache = (data.items || []).slice();
+      renderQuestionList();
+    }
+
+    function activateFilterBtn(type) {
+      ["filterAll", "filterPending", "filterReplied"].forEach((id) => {
+        const btn = document.getElementById(id);
+        btn.style.background = "#fff";
+        btn.style.color = "#334155";
+        btn.style.borderColor = "#94a3b8";
+      });
+      const map = { all: "filterAll", pending: "filterPending", replied: "filterReplied" };
+      const btn = document.getElementById(map[type]);
+      btn.style.color = "#fff";
+      btn.style.borderColor = "transparent";
+      btn.style.background = type === "pending" ? "#d97706" : (type === "replied" ? "#059669" : "#2563eb");
+    }
+
+    function renderQuestionList() {
+      let list = questionCache.slice();
+      if (currentFilter === "pending") list = list.filter((x) => !x.reply || !x.reply.trim());
+      if (currentFilter === "replied") list = list.filter((x) => x.reply && x.reply.trim());
+      const box = document.getElementById("questionList");
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">当前筛选下暂无问题</div>';
+        return;
+      }
+      box.innerHTML = list.map((item) => {
+        const replied = !!(item.reply && item.reply.trim());
+        return `
+          <div class="question-item">
+            <div class="question-header">
+              <div class="question-time">提交时间：${escapeHtml(item.createTime)}</div>
+              <div class="question-status ${replied ? "status-replied" : "status-pending"}">${replied ? "已回复" : "待回复"}</div>
+            </div>
+            <img src="${item.image}" class="question-img" alt="question-image">
+            <div class="question-text">${escapeHtml(item.text)}</div>
+            ${replied ? `<div class="reply-text"><strong>管理员回复：</strong>${escapeHtml(item.reply)}</div>` : ""}
+            <button class="btn btn-danger" onclick="deleteQuestion(${item.qid})">删除</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    window.deleteQuestion = async (qid) => {
+      if (!confirm("确定删除该问题吗？")) return;
+      try {
+        await deleteJson(`/qa/questions/${qid}`);
+        await refreshQuestions();
+      } catch (err) {
+        alert(err.message || "删除失败");
+      }
+    };
+
+    document.getElementById("imageInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        alert("仅支持 jpg/png/webp");
+        e.target.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        imageBase64 = reader.result;
+        const img = document.getElementById("previewImg");
+        img.src = imageBase64;
+        img.style.display = "block";
+        img.nextElementSibling.textContent = "";
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById("submitBtn").addEventListener("click", async () => {
+      const text = document.getElementById("questionText").value.trim();
+      if (!imageBase64 || !text) {
+        alert("请先上传图片并填写问题描述");
+        return;
+      }
+      try {
+        await postJson("/qa/questions", { text, image: imageBase64 });
+        document.getElementById("imageInput").value = "";
+        document.getElementById("questionText").value = "";
+        imageBase64 = null;
+        const img = document.getElementById("previewImg");
+        img.style.display = "none";
+        img.nextElementSibling.textContent = "点击上方选择图片（支持 jpg/png/webp）";
+        await refreshQuestions();
+        alert("提交成功");
+      } catch (err) {
+        alert(err.message || "提交失败");
+      }
+    });
+
+    document.getElementById("filterAll").addEventListener("click", () => { currentFilter = "all"; activateFilterBtn("all"); renderQuestionList(); });
+    document.getElementById("filterPending").addEventListener("click", () => { currentFilter = "pending"; activateFilterBtn("pending"); renderQuestionList(); });
+    document.getElementById("filterReplied").addEventListener("click", () => { currentFilter = "replied"; activateFilterBtn("replied"); renderQuestionList(); });
+
+    document.getElementById("clearAllBtn").addEventListener("click", async () => {
+      if (!confirm("确认清空当前账号的全部问题？此操作不可恢复。")) return;
+      try {
+        await deleteJson("/qa/questions");
+        await refreshQuestions();
+      } catch (err) {
+        alert(err.message || "清空失败");
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try { await postJson("/auth/logout", {}); } catch {}
+      showAuth();
+    });
+
+    tabLogin.addEventListener("click", () => setAuthView("login"));
+    tabRegister.addEventListener("click", () => setAuthView("register"));
+
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      if (!username || !password) return setStatus("请填写用户名和密码", true);
+      if (!isValidUsername(username)) return setStatus("用户名格式错误：仅支持3-64位字母/数字/_.-", true);
+      if (password.length < 8) return setStatus("密码长度不足：至少8位", true);
+      try {
+        const data = await postJson("/auth/login", { username, password, role: ROLE });
+        currentUser.textContent = data.username;
+        await showApp();
+      } catch (err) {
+        setStatus(normalizeAuthError(err), true);
+      }
+    });
+
+    document.getElementById("registerBtn").addEventListener("click", async () => {
+      const username = document.getElementById("regUsername").value.trim();
+      const password = document.getElementById("regPassword").value;
+      const password2 = document.getElementById("regPassword2").value;
+      if (!username || !password) return setStatus("请填写完整注册信息", true);
+      if (!isValidUsername(username)) return setStatus("用户名格式错误：仅支持3-64位字母/数字/_.-", true);
+      if (password !== password2) return setStatus("两次密码输入不一致", true);
+      if (!isStrongPassword(password)) return setStatus("密码需至少8位，且包含大小写字母和数字", true);
+      try {
+        const data = await postJson("/auth/register", { username, password, role: ROLE });
+        currentUser.textContent = data.username;
+        await showApp();
+      } catch (err) {
+        setStatus(normalizeAuthError(err), true);
+      }
+    });
+
+    verifyAndEnter();
+  </script>
+</body>
+</html>

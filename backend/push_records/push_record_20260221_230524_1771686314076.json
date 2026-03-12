@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-21 23:05:24",
+  "method": "email",
+  "recipient": "2633009812@qq.com",
+  "report_id": "1771686314076",
+  "status": "failed",
+  "error": "邮件发送失败: Traceback (most recent call last):\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 55, in <module>\n    main()\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 51, in main\n    send_email_ssl_465(msg, sender, password, host, port)\n  File \"C:\\D\\codeWorkplace\\pythonworkplace\\pythonworkplace\\骨龄预测\\models\\骨龄预测\\new-Bone-age-assessment-main\\BoneAgeWeb\\backend\\send_smtp_email.py\", line 28, in send_email_ssl_465\n    with smtplib.SMTP_SSL(host, port, timeout=20) as server:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\smtplib.py\", line 1022, in __init__\n    SMTP.__init__(self, host, port, local_hostname, timeout,\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\smtplib.py\", line 255, in __init__\n    (code, msg) = self.connect(host, port)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\smtplib.py\", line 341, in connect\n    self.sock = self._get_socket(host, port, self.timeout)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\smtplib.py\", line 1029, in _get_socket\n    new_socket = self.context.wrap_socket(new_socket,\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\ssl.py\", line 455, in wrap_socket\n    return self.sslsocket_class._create(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\ssl.py\", line 1041, in _create\n    self.do_handshake()\n  File \"C:\\D\\softwares\\miniconda\\miniconda3\\envs\\pytorch\\Lib\\ssl.py\", line 1319, in do_handshake\n    self._sslobj.do_handshake()\nssl.SSLError: [SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1010)",
+  "remarks": "你好",
+  "report_summary": {
+    "gender": "male",
+    "predicted_age_years": 14.9,
+    "predicted_age_months": 178.76,
+    "predicted_adult_height": null
+  }
+}

@@ -1,0 +1,185 @@
+.homeContainer {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: #13213e;
+}
+
+.header {
+  margin: 1.2rem 1.2rem 0;
+  padding: 0.95rem 1.2rem;
+  border-radius: 18px;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 14px 30px -24px rgba(20, 33, 61, 0.35);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.nav {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.loginBtn {
+  text-decoration: none;
+  color: #38517f;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+.loginBtn:hover {
+  background: #edf2ff;
+}
+
+.registerBtn {
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(135deg, #e26d3a, #d03b56);
+  border-radius: 999px;
+  font-weight: 700;
+  padding: 0.58rem 1rem;
+  box-shadow: 0 12px 22px -16px rgba(208, 59, 86, 0.7);
+}
+
+.main {
+  width: min(1140px, calc(100% - 2.4rem));
+  margin: 0 auto;
+  flex: 1;
+}
+
+.heroSection {
+  text-align: center;
+  margin: 4.1rem auto 2.4rem;
+}
+
+.badge {
+  display: inline-block;
+  margin-bottom: 1.2rem;
+  padding: 0.44rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #153f8d;
+  background: #e7efff;
+}
+
+.title {
+  font-size: clamp(2.2rem, 6.8vw, 4.15rem);
+  margin: 0;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+
+.highlight {
+  color: #d03b56;
+}
+
+.subtitle {
+  margin: 1.35rem auto 0;
+  color: #516079;
+  max-width: 760px;
+  font-size: clamp(0.98rem, 2.2vw, 1.18rem);
+}
+
+.ctaGroup {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.primaryCta {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.85rem 1.4rem;
+  background: linear-gradient(140deg, #1d4ed8, #1943b3);
+  box-shadow: 0 22px 30px -24px rgba(29, 78, 216, 0.75);
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1rem;
+  margin: 2.6rem 0 2.4rem;
+}
+
+.featureCard {
+  grid-column: span 6;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(20, 33, 61, 0.1);
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 14px 28px -24px rgba(20, 33, 61, 0.38);
+}
+
+.iconWrapper {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 0.9rem;
+}
+
+.featureCard h3 {
+  margin: 0 0 0.52rem;
+  font-size: 1.06rem;
+}
+
+.featureCard p {
+  margin: 0;
+  color: #516079;
+}
+
+@media (max-width: 900px) {
+  .featureCard {
+    grid-column: span 12;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    margin: 0.8rem 0.8rem 0;
+    padding: 0.8rem;
+  }
+
+  .nav {
+    gap: 0.35rem;
+  }
+
+  .loginBtn {
+    padding: 0.4rem 0.72rem;
+  }
+
+  .registerBtn {
+    padding: 0.42rem 0.75rem;
+    font-size: 0.87rem;
+  }
+
+  .heroSection {
+    margin-top: 2.8rem;
+  }
+
+  .main {
+    width: calc(100% - 1.4rem);
+  }
+}
