@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import UserDashboard from './pages/UserDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
+import AiPet from './components/AiPet'; // 导入新组件
 import './App.css';
 
 const ProtectedRoute = ({
@@ -37,6 +38,7 @@ const ProtectedRoute = ({
 function App() {
   return (
     <div className="app-main-layout">
+      {/* 1. 路由配置 */}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<Auth />} />
@@ -58,6 +60,9 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* 2. 在路由外侧挂载 AI 小精灵，使其在所有页面保持存在 */}
+      <AiPet />
     </div>
   );
 }
