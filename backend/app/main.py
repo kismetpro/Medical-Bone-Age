@@ -772,8 +772,15 @@ AUTH_DB_PATH = os.getenv("AUTH_DB_PATH", "app/data/auth.db")
 PREDICTION_DB_PATH = os.getenv("PREDICTION_DB_PATH", "app/data/predictions.db")
 AUTH_TOKEN_EXPIRE_HOURS = int(os.getenv("AUTH_TOKEN_EXPIRE_HOURS", "24"))
 PBKDF2_ITERATIONS = int(os.getenv("PBKDF2_ITERATIONS", "210000"))
-ADMIN_REGISTER_KEY = os.getenv("ADMIN_REGISTER_KEY", "")
-ADMIN_SELF_REGISTER_ENABLED = os.getenv("ADMIN_SELF_REGISTER_ENABLED", "false").lower() == "true"
+LEGACY_ADMIN_REGISTER_KEY = os.getenv("ADMIN_REGISTER_KEY", "")
+LEGACY_ADMIN_SELF_REGISTER_ENABLED = os.getenv("ADMIN_SELF_REGISTER_ENABLED", "false").lower() == "true"
+DOCTOR_REGISTER_KEY = os.getenv("DOCTOR_REGISTER_KEY", LEGACY_ADMIN_REGISTER_KEY)
+DOCTOR_SELF_REGISTER_ENABLED = os.getenv(
+    "DOCTOR_SELF_REGISTER_ENABLED",
+    "true" if LEGACY_ADMIN_SELF_REGISTER_ENABLED else "false",
+).lower() == "true"
+SUPER_ADMIN_INIT_PASSWORD = os.getenv("SUPER_ADMIN_INIT_PASSWORD", "").strip()
+DEFAULT_SUPER_ADMIN_USERNAME = "admin"
 AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "boneage_session")
 AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
 AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax").lower()
@@ -796,6 +803,22 @@ AUTH_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("AUTH_RATE_LIMIT_MAX_ATTEMPTS", "10
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com").strip()
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
+
+ROLE_USER = "user"
+ROLE_DOCTOR = "doctor"
+ROLE_SUPER_ADMIN = "super_admin"
+VALID_ROLES = {ROLE_USER, ROLE_DOCTOR, ROLE_SUPER_ADMIN}
+LEGACY_ROLE_MAP = {
+    "user": ROLE_USER,
+    "admin": ROLE_DOCTOR,
+    "doctor": ROLE_DOCTOR,
+    "super_admin": ROLE_SUPER_ADMIN,
+}
+ROLE_LEVELS = {
+    ROLE_USER: 1,
+    ROLE_DOCTOR: 2,
+    ROLE_SUPER_ADMIN: 3,
+}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 models_ensemble: List[Dict] = []
@@ -973,35 +996,192 @@ def get_prediction_conn() -> sqlite3.Connection:
     return conn
 
 
+def _normalize_role_value(role: Any) -> str:
+    raw = str(role or "").strip().lower()
+    return LEGACY_ROLE_MAP.get(raw, raw)
+
+
+def _is_valid_role(role: Any) -> bool:
+    return _normalize_role_value(role) in VALID_ROLES
+
+
+def _role_level(role: Any) -> int:
+    return ROLE_LEVELS.get(_normalize_role_value(role), 0)
+
+
+def _is_doctor_or_above(role: Any) -> bool:
+    return _role_level(role) >= ROLE_LEVELS[ROLE_DOCTOR]
+
+
+def _create_users_table(conn: sqlite3.Connection, table_name: str = "users"):
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            role TEXT NOT NULL CHECK (role IN ('user','doctor','super_admin')),
+            password_hash TEXT NOT NULL,
+            password_salt TEXT NOT NULL,
+            iterations INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _create_sessions_table(conn: sqlite3.Connection, table_name: str = "sessions"):
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('user','doctor','super_admin')),
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_user_id ON {table_name}(user_id)")
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_expires_at ON {table_name}(expires_at)")
+
+
+def _table_sql(conn: sqlite3.Connection, table_name: str) -> str:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    if not row or not row["sql"]:
+        return ""
+    return str(row["sql"]).lower()
+
+
+def _auth_role_migration_needed(conn: sqlite3.Connection) -> bool:
+    users_sql = _table_sql(conn, "users")
+    sessions_sql = _table_sql(conn, "sessions")
+    if ROLE_DOCTOR not in users_sql or ROLE_SUPER_ADMIN not in users_sql:
+        return True
+    if ROLE_DOCTOR not in sessions_sql or ROLE_SUPER_ADMIN not in sessions_sql:
+        return True
+
+    legacy_users = conn.execute("SELECT COUNT(1) FROM users WHERE role = 'admin'").fetchone()
+    if legacy_users and int(legacy_users[0]) > 0:
+        return True
+
+    legacy_sessions = conn.execute("SELECT COUNT(1) FROM sessions WHERE role = 'admin'").fetchone()
+    if legacy_sessions and int(legacy_sessions[0]) > 0:
+        return True
+    return False
+
+
+def _set_autoincrement_seed(conn: sqlite3.Connection, table_name: str):
+    seq_table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
+    ).fetchone()
+    if not seq_table:
+        return
+    max_row = conn.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table_name}").fetchone()
+    max_id = int(max_row[0]) if max_row else 0
+    conn.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table_name,))
+    conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", (table_name, max_id))
+
+
+def _migrate_auth_role_schema(conn: sqlite3.Connection):
+    users = conn.execute(
+        """
+        SELECT id, username, role, password_hash, password_salt, iterations, created_at
+        FROM users
+        ORDER BY id ASC
+        """
+    ).fetchall()
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("DROP TABLE IF EXISTS users_new")
+    _create_users_table(conn, "users_new")
+
+    conn.executemany(
+        """
+        INSERT INTO users_new (id, username, role, password_hash, password_salt, iterations, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                int(row["id"]),
+                row["username"],
+                ROLE_SUPER_ADMIN
+                if row["username"] == DEFAULT_SUPER_ADMIN_USERNAME
+                else (_normalize_role_value(row["role"]) if _is_valid_role(row["role"]) else ROLE_USER),
+                row["password_hash"],
+                row["password_salt"],
+                int(row["iterations"]),
+                row["created_at"],
+            )
+            for row in users
+        ],
+    )
+
+    conn.execute("DROP TABLE IF EXISTS sessions")
+    conn.execute("DROP TABLE users")
+    conn.execute("ALTER TABLE users_new RENAME TO users")
+    _set_autoincrement_seed(conn, "users")
+    _create_sessions_table(conn, "sessions")
+    conn.execute("PRAGMA foreign_keys = ON")
+    print("Auth role schema migrated to user/doctor/super_admin and sessions were cleared")
+
+
+def _generate_bootstrap_super_admin_password() -> str:
+    return f"Aa1{secrets.token_urlsafe(12)}"
+
+
+def _ensure_default_super_admin(conn: sqlite3.Connection):
+    row = conn.execute(
+        "SELECT id, role FROM users WHERE username = ?",
+        (DEFAULT_SUPER_ADMIN_USERNAME,),
+    ).fetchone()
+    if row:
+        normalized_role = _normalize_role_value(row["role"])
+        if normalized_role != ROLE_SUPER_ADMIN:
+            conn.execute(
+                "UPDATE users SET role = ? WHERE id = ?",
+                (ROLE_SUPER_ADMIN, int(row["id"])),
+            )
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (int(row["id"]),))
+            print(f"Promoted '{DEFAULT_SUPER_ADMIN_USERNAME}' to super_admin")
+        return
+
+    bootstrap_password = SUPER_ADMIN_INIT_PASSWORD or _generate_bootstrap_super_admin_password()
+    if not _validate_password_strength(bootstrap_password):
+        raise RuntimeError("SUPER_ADMIN_INIT_PASSWORD must include upper/lower letters and digits, minimum 8 chars")
+    salt_hex = secrets.token_hex(16)
+    pw_hash = hash_password(bootstrap_password, salt_hex, PBKDF2_ITERATIONS)
+    now_iso = _to_iso(_utc_now())
+    conn.execute(
+        """
+        INSERT INTO users (username, role, password_hash, password_salt, iterations, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            DEFAULT_SUPER_ADMIN_USERNAME,
+            ROLE_SUPER_ADMIN,
+            pw_hash,
+            salt_hex,
+            PBKDF2_ITERATIONS,
+            now_iso,
+        ),
+    )
+    if SUPER_ADMIN_INIT_PASSWORD:
+        print(f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}' from SUPER_ADMIN_INIT_PASSWORD")
+    else:
+        print(
+            f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}'. "
+            f"Temporary password: {bootstrap_password}"
+        )
+
+
 def init_auth_db():
     with get_auth_conn() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                role TEXT NOT NULL CHECK (role IN ('user','admin')),
-                password_hash TEXT NOT NULL,
-                password_salt TEXT NOT NULL,
-                iterations INTEGER NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                token TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('user','admin')),
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+        _create_users_table(conn)
+        _create_sessions_table(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS qa_questions (
@@ -1032,6 +1212,9 @@ def init_auth_db():
             )
             """
         )
+        if _auth_role_migration_needed(conn):
+            _migrate_auth_role_schema(conn)
+        _ensure_default_super_admin(conn)
         conn.commit()
 
 
@@ -1341,12 +1524,28 @@ class TokenRequest(BaseModel):
     token: Optional[str] = Field(default=None, min_length=20, max_length=256)
 
 
+class AccountCreateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+    role: str
+
+
+class AccountRoleUpdateRequest(BaseModel):
+    role: str
+
+
+def _parse_role_or_raise(raw_role: str, allowed_roles: set[str]) -> str:
+    role = _normalize_role_value(raw_role)
+    if role not in allowed_roles:
+        allowed_display = "', '".join(sorted(allowed_roles))
+        raise HTTPException(status_code=400, detail=f"Role must be one of '{allowed_display}'")
+    return role
+
+
 @app.post("/auth/register")
 def auth_register(payload: RegisterRequest, request: Request, response: Response):
     _check_auth_rate_limit(request, "register")
-    role = payload.role.lower().strip()
-    if role not in {"user", "admin"}:
-        raise HTTPException(status_code=400, detail="Role must be 'user' or 'admin'")
+    role = _parse_role_or_raise(payload.role, {ROLE_USER, ROLE_DOCTOR})
 
     username = payload.username.strip()
     if not _validate_username(username):
@@ -1354,10 +1553,10 @@ def auth_register(payload: RegisterRequest, request: Request, response: Response
     if not _validate_password_strength(payload.password):
         raise HTTPException(status_code=400, detail="Password must include upper/lower letters and digits, minimum 8 chars")
 
-    if role == "admin":
-        if not ADMIN_SELF_REGISTER_ENABLED:
-            raise HTTPException(status_code=403, detail="Admin self-register is disabled")
-        if ADMIN_REGISTER_KEY and payload.admin_key != ADMIN_REGISTER_KEY:
+    if role == ROLE_DOCTOR:
+        if not DOCTOR_SELF_REGISTER_ENABLED:
+            raise HTTPException(status_code=403, detail="Doctor self-register is disabled")
+        if DOCTOR_REGISTER_KEY and payload.admin_key != DOCTOR_REGISTER_KEY:
             raise HTTPException(status_code=403, detail="Access denied")
 
     salt_hex = secrets.token_hex(16)
@@ -1392,9 +1591,7 @@ def auth_register(payload: RegisterRequest, request: Request, response: Response
 @app.post("/auth/login")
 def auth_login(payload: LoginRequest, request: Request, response: Response):
     _check_auth_rate_limit(request, "login")
-    role = payload.role.lower().strip()
-    if role not in {"user", "admin"}:
-        raise HTTPException(status_code=400, detail="Role must be 'user' or 'admin'")
+    role = _parse_role_or_raise(payload.role, VALID_ROLES)
 
     username = payload.username.strip()
     if not _validate_username(username):
@@ -1471,20 +1668,9 @@ def auth_config():
         "cookie_name": AUTH_COOKIE_NAME,
         "cookie_secure": AUTH_COOKIE_SECURE,
         "cookie_samesite": AUTH_COOKIE_SAMESITE,
-        "admin_self_register_enabled": ADMIN_SELF_REGISTER_ENABLED,
+        "doctor_self_register_enabled": DOCTOR_SELF_REGISTER_ENABLED,
+        "admin_self_register_enabled": DOCTOR_SELF_REGISTER_ENABLED,
     }
-
-
-def _require_admin(request: Request):
-    token = _resolve_token(request, None)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    with get_auth_conn() as conn:
-        session_row = get_session(conn, token)
-        if not session_row:
-            raise HTTPException(status_code=401, detail="Session expired or invalid")
-        if session_row["role"] != "admin":
-            raise HTTPException(status_code=403, detail="Admin role required")
 
 
 def _require_session(request: Request) -> sqlite3.Row:
@@ -1498,22 +1684,169 @@ def _require_session(request: Request) -> sqlite3.Row:
         return session_row
 
 
+def _require_doctor(request: Request) -> sqlite3.Row:
+    session = _require_session(request)
+    if not _is_doctor_or_above(session["role"]):
+        raise HTTPException(status_code=403, detail="Doctor role required")
+    return session
+
+
+def _require_super_admin(request: Request) -> sqlite3.Row:
+    session = _require_session(request)
+    if _normalize_role_value(session["role"]) != ROLE_SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Super admin role required")
+    return session
+
+
 @app.get("/auth/admin_ping")
 def auth_admin_ping(request: Request):
-    _require_admin(request)
-    return {"success": True}
+    session = _require_doctor(request)
+    return {"success": True, "role": session["role"]}
 
 
 @app.post("/auth/user_ping")
 def auth_user_ping(request: Request):
-    token = _resolve_token(request, None)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    with get_auth_conn() as conn:
-        session_row = get_session(conn, token)
-        if not session_row:
-            raise HTTPException(status_code=401, detail="Session expired or invalid")
+    _require_session(request)
     return {"success": True}
+
+
+def _count_super_admins(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        "SELECT COUNT(1) FROM users WHERE role = ?",
+        (ROLE_SUPER_ADMIN,),
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def _invalidate_user_sessions(conn: sqlite3.Connection, user_id: int):
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+
+def _delete_prediction_records_for_user(user_id: int):
+    with get_prediction_conn() as conn:
+        conn.execute("DELETE FROM bone_age_points WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM predictions WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
+@app.get("/auth/users")
+def auth_list_users(request: Request):
+    _require_super_admin(request)
+    with get_auth_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, username, role, created_at
+            FROM users
+            ORDER BY created_at DESC, id DESC
+            """
+        ).fetchall()
+
+    items = sorted(
+        [
+            {
+                "id": int(row["id"]),
+                "username": row["username"],
+                "role": _normalize_role_value(row["role"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ],
+        key=lambda item: (-_role_level(item["role"]), item["created_at"], item["id"]),
+    )
+    return {"success": True, "items": items}
+
+
+@app.post("/auth/users")
+def auth_create_user(payload: AccountCreateRequest, request: Request, response: Response):
+    _require_super_admin(request)
+    role = _parse_role_or_raise(payload.role, VALID_ROLES)
+    username = payload.username.strip()
+    if not _validate_username(username):
+        raise HTTPException(status_code=400, detail="Username format invalid")
+    if not _validate_password_strength(payload.password):
+        raise HTTPException(status_code=400, detail="Password must include upper/lower letters and digits, minimum 8 chars")
+
+    salt_hex = secrets.token_hex(16)
+    pw_hash = hash_password(payload.password, salt_hex, PBKDF2_ITERATIONS)
+    now_iso = _to_iso(_utc_now())
+
+    try:
+        with get_auth_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (username, role, password_hash, password_salt, iterations, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (username, role, pw_hash, salt_hex, PBKDF2_ITERATIONS, now_iso),
+            )
+            user_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Username already exists")
+
+    return {
+        "success": True,
+        "id": user_id,
+        "username": username,
+        "role": role,
+        "created_at": now_iso,
+    }
+
+
+@app.patch("/auth/users/{target_user_id}/role")
+def auth_update_user_role(target_user_id: int, payload: AccountRoleUpdateRequest, request: Request):
+    session = _require_super_admin(request)
+    new_role = _parse_role_or_raise(payload.role, VALID_ROLES)
+
+    if int(session["user_id"]) == target_user_id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+
+    with get_auth_conn() as conn:
+        row = conn.execute(
+            "SELECT id, username, role FROM users WHERE id = ?",
+            (target_user_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        current_role = _normalize_role_value(row["role"])
+        if current_role == ROLE_SUPER_ADMIN and new_role != ROLE_SUPER_ADMIN and _count_super_admins(conn) <= 1:
+            raise HTTPException(status_code=400, detail="At least one super admin must remain")
+
+        conn.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, target_user_id))
+        _invalidate_user_sessions(conn, target_user_id)
+        conn.commit()
+
+    return {"success": True, "id": target_user_id, "role": new_role}
+
+
+@app.delete("/auth/users/{target_user_id}")
+def auth_delete_user(target_user_id: int, request: Request):
+    session = _require_super_admin(request)
+
+    if int(session["user_id"]) == target_user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+
+    with get_auth_conn() as conn:
+        row = conn.execute(
+            "SELECT id, username, role FROM users WHERE id = ?",
+            (target_user_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        target_role = _normalize_role_value(row["role"])
+        if target_role == ROLE_SUPER_ADMIN and _count_super_admins(conn) <= 1:
+            raise HTTPException(status_code=400, detail="At least one super admin must remain")
+
+        _delete_prediction_records_for_user(target_user_id)
+        _invalidate_user_sessions(conn, target_user_id)
+        conn.execute("DELETE FROM qa_questions WHERE owner_user_id = ?", (target_user_id,))
+        conn.execute("DELETE FROM articles WHERE author_id = ?", (target_user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (target_user_id,))
+        conn.commit()
+
+    return {"success": True, "id": target_user_id, "username": row["username"]}
 
 
 class NotificationRequest(BaseModel):
@@ -1537,9 +1870,7 @@ def list_articles(request: Request):
 
 @app.post("/articles")
 def create_article(payload: ArticleCreateRequest, request: Request):
-    session = _require_session(request)
-    if session["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Only doctors can post articles")
+    session = _require_doctor(request)
     now_iso = _to_iso(_utc_now())
     with get_auth_conn() as conn:
         conn.execute(
@@ -1587,7 +1918,7 @@ def _fetch_prediction_row_for_session(pred_id: str, session: sqlite3.Row) -> sql
         row = conn.execute("SELECT * FROM predictions WHERE id = ?", (pred_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    if session["role"] != "admin" and int(row["user_id"]) != int(session["user_id"]):
+    if not _is_doctor_or_above(session["role"]) and int(row["user_id"]) != int(session["user_id"]):
         raise HTTPException(status_code=403, detail="Access denied")
     return row
 
@@ -1641,7 +1972,7 @@ def qa_list_questions(request: Request):
     role = session["role"]
     user_id = int(session["user_id"])
     with get_auth_conn() as conn:
-        if role == "admin":
+        if _is_doctor_or_above(role):
             rows = conn.execute(
                 """
                 SELECT id, owner_username, question_text, image_base64, reply_text, created_at, updated_at
@@ -1705,7 +2036,7 @@ def qa_create_question(payload: QaCreateRequest, request: Request):
 
 @app.post("/qa/questions/{qid}/reply")
 def qa_reply_question(qid: int, payload: QaReplyRequest, request: Request):
-    _require_admin(request)
+    _require_doctor(request)
     reply = payload.reply.strip()
     if not reply:
         raise HTTPException(status_code=400, detail="Reply cannot be empty")
@@ -1728,7 +2059,7 @@ def qa_delete_question(qid: int, request: Request):
     role = session["role"]
     user_id = int(session["user_id"])
     with get_auth_conn() as conn:
-        if role == "admin":
+        if _is_doctor_or_above(role):
             cur = conn.execute("DELETE FROM qa_questions WHERE id = ?", (qid,))
         else:
             cur = conn.execute(
@@ -1747,7 +2078,7 @@ def qa_clear_questions(request: Request):
     role = session["role"]
     user_id = int(session["user_id"])
     with get_auth_conn() as conn:
-        if role == "admin":
+        if _is_doctor_or_above(role):
             cur = conn.execute("DELETE FROM qa_questions")
         else:
             cur = conn.execute("DELETE FROM qa_questions WHERE owner_user_id = ?", (user_id,))
@@ -1954,7 +2285,7 @@ def list_predictions(request: Request):
     role = str(session["role"])
 
     with get_prediction_conn() as conn:
-        if role == "admin":
+        if _is_doctor_or_above(role):
             rows = conn.execute("SELECT id, user_id, timestamp, filename, predicted_age_years, gender FROM predictions ORDER BY timestamp DESC LIMIT 100").fetchall()
         else:
             rows = conn.execute("SELECT id, timestamp, filename, predicted_age_years, gender FROM predictions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,)).fetchall()
@@ -2044,7 +2375,7 @@ def list_bone_age_points(request: Request, user_id: Optional[int] = Query(defaul
     session = _require_session(request)
     uid = int(session["user_id"])
     role = str(session["role"])
-    target_user_id = user_id if (role == "admin" and user_id is not None) else uid
+    target_user_id = user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
 
     with get_prediction_conn() as conn:
         rows = conn.execute(
@@ -2112,7 +2443,7 @@ async def create_bone_age_point(request: Request):
     parsed_point_time = _to_optional_int(raw_point_time)
     note = str(raw_note or "").strip()[:500]
 
-    target_user_id = parsed_user_id if (role == "admin" and parsed_user_id is not None) else uid
+    target_user_id = parsed_user_id if (_is_doctor_or_above(role) and parsed_user_id is not None) else uid
     now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
     point_time = parsed_point_time if parsed_point_time is not None else now_ts
     now_iso = _to_iso(_utc_now())
@@ -2141,7 +2472,7 @@ def delete_bone_age_point(point_id: int, request: Request):
         row = conn.execute("SELECT user_id FROM bone_age_points WHERE id = ?", (point_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Point not found")
-        if role != "admin" and int(row["user_id"]) != uid:
+        if not _is_doctor_or_above(role) and int(row["user_id"]) != uid:
             raise HTTPException(status_code=403, detail="Access denied")
         conn.execute("DELETE FROM bone_age_points WHERE id = ?", (point_id,))
         conn.commit()
@@ -2154,7 +2485,7 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
     session = _require_session(request)
     uid = int(session["user_id"])
     role = str(session["role"])
-    target_user_id = user_id if (role == "admin" and user_id is not None) else uid
+    target_user_id = user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
 
     with get_prediction_conn() as conn:
         rows = conn.execute(
@@ -2173,7 +2504,7 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
 
 @app.post("/doctor/ai-assistant")
 def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
-    _require_admin(request)
+    _require_doctor(request)
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured")
 
