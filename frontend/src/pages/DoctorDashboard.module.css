@@ -286,6 +286,249 @@ tr:hover {
   color: #1d4ed8;
 }
 
+.dangerBtn {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.dangerBtn:hover {
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.primaryActionBtn {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d4ed8, #173c9c);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.58rem 0.92rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.primaryActionBtn:disabled,
+.refreshBtn:disabled,
+.actionBtn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.formInput,
+.rowSelect,
+.textareaInput {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #1e293b;
+  font: inherit;
+  padding: 0.72rem 0.8rem;
+}
+
+.textareaInput {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.rowSelect {
+  padding: 0.45rem 0.55rem;
+}
+
+.noticeBanner {
+  margin-top: 1rem;
+  border-radius: 12px;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid transparent;
+  font-size: 0.92rem;
+}
+
+.noticeError {
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.noticeSuccess {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.accountFormGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.selfBadge {
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.successPill,
+.pendingPill {
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.successPill {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.pendingPill {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.replyBox {
+  margin-bottom: 0.85rem;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #14532d;
+  padding: 0.72rem 0.82rem;
+  line-height: 1.5;
+}
+
+.predictionFormGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(260px, 420px);
+  gap: 1rem;
+}
+
+.predictionInputGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.genderSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  background: #eef4ff;
+  border-radius: 10px;
+  padding: 0.3rem;
+}
+
+.genderSwitch button {
+  border: none;
+  background: transparent;
+  color: #516079;
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.genderSwitchActive {
+  background: #fff !important;
+  color: #1d4ed8 !important;
+  box-shadow: 0 10px 18px -16px rgba(20, 33, 61, 0.7);
+}
+
+.uploadPanel {
+  min-height: 260px;
+  border: 2px dashed #cad7f0;
+  border-radius: 14px;
+  background: #f8fbff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.uploadPlaceholder {
+  text-align: center;
+  color: #617190;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+}
+
+.uploadPlaceholder p,
+.uploadPlaceholder span {
+  margin: 0;
+}
+
+.uploadPreviewImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020617;
+}
+
+.selectionSummary {
+  margin-top: 0.9rem;
+  border-radius: 12px;
+  border: 1px solid #dbe7f8;
+  background: #f8fbff;
+  padding: 0.8rem 0.95rem;
+  color: #475569;
+}
+
+.selectionSummary p {
+  margin: 0 0 0.45rem;
+}
+
+.selectionSummary p:last-child {
+  margin-bottom: 0;
+}
+
+.modalFooter {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.anomalyLabel {
+  position: absolute;
+  left: 0;
+  top: -18px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.emptyDetailPanel {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  background: #f8fafc;
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -400,5 +643,20 @@ tr:hover {
 
   .detailGrid {
     grid-template-columns: 1fr;
+  }
+
+  .predictionFormGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .predictionInputGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .rowActions,
+  .headerActions,
+  .modalFooter {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
