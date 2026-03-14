@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { normalizePredictionResult, submitPredictionRequest } from '../lib/prediction';
 import styles from './UserDashboard.module.css';
 
 // --- Interfaces (Copied from previous App.tsx) ---
@@ -360,29 +361,16 @@ export default function UserDashboard() {
     const handleSubmit = async () => {
         if (!file) return;
         setLoading(true); setError(null);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('gender', gender);
-        if (currentHeight) formData.append('height', currentHeight);
-        if (realAge) formData.append('real_age_years', realAge);
 
         try {
-            const response = await fetch(`${API_BASE}/predict`, {
-                method: 'POST',
-                credentials: 'include',
-                body: formData,
-                headers: buildAuthHeaders()
+            const data = await submitPredictionRequest({
+                file,
+                gender,
+                currentHeight,
+                realAge,
+                headers: buildAuthHeaders(),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.detail || `Prediction failed`);
-            }
-            const newResult: PredictionResult = {
-                ...data,
-                id: data.id || Date.now().toString(),
-                timestamp: data.timestamp || Date.now(),
-                real_age_years: realAge ? parseFloat(realAge) : undefined
-            };
+            const newResult = normalizePredictionResult<PredictionResult>(data, realAge);
             setResult(newResult);
             fetchPredictionHistory();
             fetchBoneAgePoints();

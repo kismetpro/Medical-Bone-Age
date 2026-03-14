@@ -31,3 +31,5 @@ timeout /t 3 /nobreak > nul
 :: --- 启动前端 ---
 echo [前端] 正在启动 Vite 前端开发服务器 (端口 5173)...
 start "BoneAgeWeb-Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
+timeout /t 3 /nobreak > nul
+start http://localhost:5173/

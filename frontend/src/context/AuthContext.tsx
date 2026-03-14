@@ -1,12 +1,19 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-type Role = 'user' | 'admin' | null;
+export type AuthRole = 'user' | 'doctor' | 'super_admin';
+type Role = AuthRole | null;
+
+interface StoredUser {
+  username: string;
+  role: string;
+  token?: string;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
   role: Role;
   username: string | null;
-  login: (userData: { username: string; role: string; token?: string }) => void;
+  login: (userData: StoredUser) => void;
   logout: () => void;
 }
 
@@ -18,36 +25,58 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => { },
 });
 
+const normalizeRole = (value: unknown): Role => {
+  if (value === 'admin') return 'doctor';
+  if (value === 'user' || value === 'doctor' || value === 'super_admin') return value;
+  return null;
+};
+
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [role, setRole] = useState<Role>(null);
   const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check local storage for existing session on mount
     const storedUser = localStorage.getItem('boneage_user');
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        setIsAuthenticated(true);
-        setRole(user.role);
-        setUsername(user.username);
-      } catch (e) {
-        console.error('Failed to parse user session', e);
-        localStorage.removeItem('boneage_user');
+    if (!storedUser) return;
+
+    try {
+      const user = JSON.parse(storedUser) as StoredUser;
+      const normalizedRole = normalizeRole(user.role);
+      if (!normalizedRole || !user.username) {
+        throw new Error('Invalid stored session');
       }
+
+      setIsAuthenticated(true);
+      setRole(normalizedRole);
+      setUsername(user.username);
+      localStorage.setItem(
+        'boneage_user',
+        JSON.stringify({ ...user, role: normalizedRole }),
+      );
+    } catch (error) {
+      console.error('Failed to parse user session', error);
+      localStorage.removeItem('boneage_user');
+      localStorage.removeItem('boneage_token');
     }
   }, []);
 
-  const login = (userData: { username: string; role: string; token?: string }) => {
+  const login = (userData: StoredUser) => {
+    const normalizedRole = normalizeRole(userData.role);
+    if (!normalizedRole) {
+      throw new Error(`Unsupported role: ${userData.role}`);
+    }
+
+    const normalizedUser = { ...userData, role: normalizedRole };
     setIsAuthenticated(true);
-    setRole(userData.role as Role);
+    setRole(normalizedRole);
     setUsername(userData.username);
-    localStorage.setItem('boneage_user', JSON.stringify(userData));
+    localStorage.setItem('boneage_user', JSON.stringify(normalizedUser));
+
     if (userData.token) {
-      localStorage.setItem('boneage_token', userData.token); // Store token if provided
+      localStorage.setItem('boneage_token', userData.token);
     } else {
       localStorage.removeItem('boneage_token');
     }
@@ -59,7 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUsername(null);
     localStorage.removeItem('boneage_user');
     localStorage.removeItem('boneage_token');
-    localStorage.removeItem('boneage_history'); // Optional: clear recent local history on logout
+    localStorage.removeItem('boneage_history');
   };
 
   return (
