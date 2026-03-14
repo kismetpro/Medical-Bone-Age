@@ -1729,6 +1729,34 @@ def _delete_prediction_records_for_user(user_id: int):
         conn.commit()
 
 
+def _fetch_usernames_by_ids(user_ids: List[int]) -> Dict[int, str]:
+    normalized_ids = sorted({int(user_id) for user_id in user_ids})
+    if not normalized_ids:
+        return {}
+
+    placeholders = ",".join(["?"] * len(normalized_ids))
+    with get_auth_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, username FROM users WHERE id IN ({placeholders})",
+            tuple(normalized_ids),
+        ).fetchall()
+
+    return {int(row["id"]): row["username"] for row in rows}
+
+
+def _fetch_patient_user_or_raise(target_user_id: int) -> sqlite3.Row:
+    with get_auth_conn() as conn:
+        row = conn.execute(
+            "SELECT id, username, role, created_at FROM users WHERE id = ?",
+            (target_user_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Target user not found")
+    if _normalize_role_value(row["role"]) != ROLE_USER:
+        raise HTTPException(status_code=400, detail="Target user must be a personal user")
+    return row
+
+
 @app.get("/auth/users")
 def auth_list_users(request: Request):
     _require_super_admin(request)
@@ -1754,6 +1782,33 @@ def auth_list_users(request: Request):
         key=lambda item: (-_role_level(item["role"]), item["created_at"], item["id"]),
     )
     return {"success": True, "items": items}
+
+
+@app.get("/doctor/patient-users")
+def doctor_list_patient_users(request: Request):
+    _require_doctor(request)
+    with get_auth_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, username, created_at
+            FROM users
+            WHERE role = ?
+            ORDER BY created_at DESC, id DESC
+            """,
+            (ROLE_USER,),
+        ).fetchall()
+
+    return {
+        "success": True,
+        "items": [
+            {
+                "id": int(row["id"]),
+                "username": row["username"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ],
+    }
 
 
 @app.post("/auth/users")
@@ -2131,6 +2186,7 @@ async def predict_bone_age(
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
     height: float = Form(None, description="Current height in cm"),
     real_age_years: float = Form(None, description="Chronological age in years"),
+    target_user_id: Optional[int] = Form(default=None, description="Personal user id for doctor-created predictions"),
 ):
     if not models_ensemble:
         raise HTTPException(status_code=503, detail="Age model not loaded")
@@ -2138,6 +2194,31 @@ async def predict_bone_age(
     gender_lower = gender.lower()
     if gender_lower not in ["male", "female"]:
         raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+    token = _resolve_token(request, None)
+    session_row = None
+    if token:
+        with get_auth_conn() as conn:
+            session_row = get_session(conn, token)
+
+    target_user_row = None
+    if target_user_id is not None:
+        if not session_row:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        if not _is_doctor_or_above(session_row["role"]):
+            raise HTTPException(status_code=403, detail="Doctor role required")
+        target_user_row = _fetch_patient_user_or_raise(int(target_user_id))
+
+    owner_user_id = (
+        int(target_user_row["id"])
+        if target_user_row
+        else (int(session_row["user_id"]) if session_row else None)
+    )
+    owner_username = (
+        target_user_row["username"]
+        if target_user_row
+        else (session_row["username"] if session_row else None)
+    )
 
     gender_val = 1.0 if gender_lower == "male" else 0.0
     gender_tensor = torch.tensor([[gender_val]], dtype=torch.float32, device=device)
@@ -2215,60 +2296,60 @@ async def predict_bone_age(
             "predicted_adult_height": predicted_adult_height,
             "ensemble_size": len(models_ensemble),
         }
+        if owner_user_id is not None:
+            result_payload["user_id"] = owner_user_id
+        if owner_username:
+            result_payload["username"] = owner_username
 
         # Save to database if session exists
         import json
-        token = _resolve_token(request, None)
-        if token:
-            with get_auth_conn() as conn:
-                session_row = get_session(conn, token)
-            if session_row:
-                import time
-                import uuid
+        if owner_user_id is not None:
+            import time
+            import uuid
 
-                pred_id = str(uuid.uuid4())
-                now_ts = int(time.time() * 1000)
+            pred_id = str(uuid.uuid4())
+            now_ts = int(time.time() * 1000)
 
-                # Ensure the stored JSON contains id and timestamp so full_json
-                # stays consistent with the other table columns.
-                result_payload["id"] = pred_id
-                result_payload["timestamp"] = now_ts
+            # Ensure the stored JSON contains id and timestamp so full_json
+            # stays consistent with the other table columns.
+            result_payload["id"] = pred_id
+            result_payload["timestamp"] = now_ts
 
-                with get_prediction_conn() as conn:
-                    conn.execute(
-                        """
-                        INSERT INTO predictions (id, user_id, timestamp, filename, predicted_age_months, predicted_age_years, gender, real_age_years, predicted_adult_height, full_json)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            pred_id,
-                            session_row["user_id"],
-                            now_ts,
-                            file.filename or "unknown.jpg",
-                            result_payload["predicted_age_months"],
-                            result_payload["predicted_age_years"],
-                            gender_lower,
-                            real_age_years,
-                            predicted_adult_height,
-                            json.dumps(result_payload),
-                        ),
-                    )
-                    conn.execute(
-                        """
-                        INSERT INTO bone_age_points (user_id, point_time, bone_age_years, chronological_age_years, source, prediction_id, note, created_at)
-                        VALUES (?, ?, ?, ?, 'prediction', ?, '', ?)
-                        """,
-                        (
-                            session_row["user_id"],
-                            now_ts,
-                            result_payload["predicted_age_years"],
-                            real_age_years,
-                            pred_id,
-                            _to_iso(_utc_now()),
-                        ),
-                    )
-                    conn.commit()
-                # `result_payload` already contains `id` and `timestamp`.
+            with get_prediction_conn() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO predictions (id, user_id, timestamp, filename, predicted_age_months, predicted_age_years, gender, real_age_years, predicted_adult_height, full_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        pred_id,
+                        owner_user_id,
+                        now_ts,
+                        file.filename or "unknown.jpg",
+                        result_payload["predicted_age_months"],
+                        result_payload["predicted_age_years"],
+                        gender_lower,
+                        real_age_years,
+                        predicted_adult_height,
+                        json.dumps(result_payload),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO bone_age_points (user_id, point_time, bone_age_years, chronological_age_years, source, prediction_id, note, created_at)
+                    VALUES (?, ?, ?, ?, 'prediction', ?, '', ?)
+                    """,
+                    (
+                        owner_user_id,
+                        now_ts,
+                        result_payload["predicted_age_years"],
+                        real_age_years,
+                        pred_id,
+                        _to_iso(_utc_now()),
+                    ),
+                )
+                conn.commit()
+            # `result_payload` already contains `id` and `timestamp`.
 
         return result_payload
 
@@ -2289,8 +2370,13 @@ def list_predictions(request: Request):
             rows = conn.execute("SELECT id, user_id, timestamp, filename, predicted_age_years, gender FROM predictions ORDER BY timestamp DESC LIMIT 100").fetchall()
         else:
             rows = conn.execute("SELECT id, timestamp, filename, predicted_age_years, gender FROM predictions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,)).fetchall()
+    items = [{k: r[k] for k in r.keys()} for r in rows]
+    if _is_doctor_or_above(role):
+        usernames = _fetch_usernames_by_ids([int(item["user_id"]) for item in items if item.get("user_id") is not None])
+        for item in items:
+            item["username"] = usernames.get(int(item["user_id"]), "")
 
-    return {"success": True, "items": [{k: r[k] for k in r.keys()} for r in rows]}
+    return {"success": True, "items": items}
 
 
 @app.get("/predictions/{pred_id}")
@@ -2304,6 +2390,10 @@ def get_prediction_detail(pred_id: str, request: Request):
     data["id"] = pred_id
     data["timestamp"] = row["timestamp"]
     data["real_age_years"] = row["real_age_years"]
+    data["user_id"] = int(row["user_id"])
+    usernames = _fetch_usernames_by_ids([int(row["user_id"])])
+    if usernames.get(int(row["user_id"])):
+        data["username"] = usernames[int(row["user_id"])]
     return {"success": True, "data": data}
 
 
@@ -2368,6 +2458,19 @@ def update_prediction(pred_id: str, payload: PredictionUpdateRequest, request: R
         conn.commit()
 
     return {"success": True, "message": "Prediction updated"}
+
+
+@app.delete("/predictions/{pred_id}")
+def delete_prediction(pred_id: str, request: Request):
+    session = _require_session(request)
+    row = _fetch_prediction_row_for_session(pred_id, session)
+
+    with get_prediction_conn() as conn:
+        conn.execute("DELETE FROM bone_age_points WHERE prediction_id = ?", (pred_id,))
+        conn.execute("DELETE FROM predictions WHERE id = ?", (pred_id,))
+        conn.commit()
+
+    return {"success": True, "id": pred_id, "user_id": int(row["user_id"])}
 
 
 @app.get("/bone-age-points")
