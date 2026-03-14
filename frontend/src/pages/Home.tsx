@@ -39,51 +39,7 @@ export default function Home() {
                     </div>
                 </motion.section>
 
-                <section className={styles.features}>
-                    <motion.div
-                        whileHover={{ y: -5 }}
-                        className={styles.featureCard}
-                    >
-                        <div className={styles.iconWrapper} style={{ background: '#eff6ff', color: '#3b82f6' }}>
-                            <Activity size={24} />
-                        </div>
-                        <h3>智能推断</h3>
-                        <p>结合基于 ResNet 的预测和 RUS-CHN 分期模型，提供最准确的骨龄评估结果。</p>
-                    </motion.div>
-
-                    <motion.div
-                        whileHover={{ y: -5 }}
-                        className={styles.featureCard}
-                    >
-                        <div className={styles.iconWrapper} style={{ background: '#f0fdf4', color: '#22c55e' }}>
-                            <Users size={24} />
-                        </div>
-                        <h3>成长追踪</h3>
-                        <p>清晰的历史时间线和生长曲线，轻松掌握孩子的近远期发育轨迹。</p>
-                    </motion.div>
-
-                    <motion.div
-                        whileHover={{ y: -5 }}
-                        className={styles.featureCard}
-                    >
-                        <div className={styles.iconWrapper} style={{ background: '#fef2f2', color: '#ef4444' }}>
-                            <Shield size={24} />
-                        </div>
-                        <h3>医生验证</h3>
-                        <p>基于 Grad-CAM 与特征异常检测，显著帮助临床医生做出准确决策。</p>
-                    </motion.div>
-
-                    <motion.div
-                        whileHover={{ y: -5 }}
-                        className={styles.featureCard}
-                    >
-                        <div className={styles.iconWrapper} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
-                            <BarChart3 size={24} />
-                        </div>
-                        <h3>综合报告</h3>
-                        <p>一键自动生成专业的体检与骨龄发育报告，可一键打印和分享。</p>
-                    </motion.div>
-                </section>
+  
             </main>
         </div>
     );
