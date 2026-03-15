@@ -1434,9 +1434,14 @@ def preprocess_image(image_bytes: bytes):
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("Could not decode image")
-
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
+    
+    # 步骤2: Resize 到 256×256（如果需要）
+    img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_LINEAR)
+    
+
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # img = cv2.resize(img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
     img = img.astype(np.float32) / 255.0
     img = (img - IMAGENET_MEAN) / IMAGENET_STD
     img = np.transpose(img, (2, 0, 1))
