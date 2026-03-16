@@ -18,6 +18,8 @@ import { DEFAULT_SETTINGS } from './types';
 import UserSidebar from './components/UserSidebar';
 import PredictTab from './components/PredictTab';
 import HistoryTab from './components/HistoryTab';
+import ConsultationPage from '../Consultation';
+import CommunityPage from '../Community';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
@@ -35,7 +37,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -421,6 +423,9 @@ export default function UserDashboard() {
                         updatePrediction={updatePrediction}
                     />
                 )}
+                
+                {activeTab === 'consultation' && <ConsultationPage />}
+                {activeTab === 'community' && <CommunityPage />}
             </main>
         </div>
     );

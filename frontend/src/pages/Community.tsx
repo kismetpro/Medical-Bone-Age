@@ -132,7 +132,7 @@ const CommunityPage: React.FC = () => {
     };
 
     return (
-        <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div style={{ padding: '0', display: 'flex', flexDirection: 'column', gap: '2rem', height: '100%', overflowY: 'auto' }}>
             
             {/* 专家科普区 */}
             <div className={userStyles.communityPanel}>

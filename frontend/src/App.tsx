@@ -6,8 +6,6 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import UserDashboard from './pages/UserDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
-import Community from './pages/Community';
-import Consultation from './pages/Consultation';
 import AiPet from './components/AiPet'; // 导入新组件
 import './App.css';
 
@@ -56,22 +54,6 @@ function App() {
           element={(
             <ProtectedRoute allowedRoles={['doctor', 'super_admin']}>
               <DoctorDashboard />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/consultation"
-          element={(
-            <ProtectedRoute allowedRoles={['user', 'doctor', 'super_admin']}>
-              <Consultation />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/community"
-          element={(
-            <ProtectedRoute allowedRoles={['user', 'doctor', 'super_admin']}>
-              <Community />
             </ProtectedRoute>
           )}
         />

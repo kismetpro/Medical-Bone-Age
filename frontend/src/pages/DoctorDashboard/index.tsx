@@ -18,6 +18,8 @@ import type {
 import DoctorSidebar from './components/DoctorSidebar';
 import RecordsTab from './components/RecordsTab';
 import AccountsTab from './components/AccountsTab';
+import ConsultationPage from '../Consultation';
+import CommunityPage from '../Community';
 import { PredictionModal, DetailModal } from './components/Modals';
 
 export default function DoctorDashboard() {
@@ -297,6 +299,9 @@ export default function DoctorDashboard() {
             deleteAccount={deleteAccount}
           />
         )}
+
+        {activeTab === 'consultation' && <ConsultationPage />}
+        {activeTab === 'community' && <CommunityPage />}
       </main>
 
       {predictionModalOpen && (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Users, FileText, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut } from 'lucide-react';
+import { Activity, Users, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../DoctorDashboard.module.css';
 import type { ActiveTab } from '../types';
@@ -21,8 +21,6 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
     const location = useLocation();
 
     const isDashboard = location.pathname === '/doctor-dashboard';
-    const isConsultation = location.pathname === '/consultation';
-    const isCommunity = location.pathname === '/community';
 
     return (
         <aside className={styles.sidebar}>
@@ -44,15 +42,21 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 
                 <button 
-                    className={`${styles.navItem} ${isConsultation ? styles.active : ''}`} 
-                    onClick={() => navigate('/consultation')}
+                    className={`${styles.navItem} ${activeTab === 'consultation' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('consultation');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
                 >
                     <Bot size={18} /> AI 助手
                 </button>
                 
                 <button 
-                    className={`${styles.navItem} ${isCommunity ? styles.active : ''}`} 
-                    onClick={() => navigate('/community')}
+                    className={`${styles.navItem} ${activeTab === 'community' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('community');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
                 >
                     <MessageSquare size={18} /> 问答社区
                 </button>
