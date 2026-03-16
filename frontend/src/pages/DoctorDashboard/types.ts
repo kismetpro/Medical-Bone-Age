@@ -40,7 +40,7 @@ export interface ManagedAccount {
     created_at: string; 
 }
 
-export type ActiveTab = 'records' | 'articles' | 'qa' | 'ai' | 'accounts';
+export type ActiveTab = 'records' | 'accounts';
 
 export type ChatMessage = { 
     role: 'user' | 'assistant'; 

@@ -18,7 +18,6 @@ import { DEFAULT_SETTINGS } from './types';
 import UserSidebar from './components/UserSidebar';
 import PredictTab from './components/PredictTab';
 import HistoryTab from './components/HistoryTab';
-import CommunityTab from './components/CommunityTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
@@ -37,7 +36,6 @@ export default function UserDashboard() {
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
     const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community'>('predict');
-    const [articles, setArticles] = useState<any[]>([]);
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -46,109 +44,8 @@ export default function UserDashboard() {
     const [pointNote, setPointNote] = useState('');
     const [pointLoading, setPointLoading] = useState(false);
 
-    // --- Forum (QA) state ---
-    const [qaList, setQaList] = useState<any[]>([]);
-    const [qaText, setQaText] = useState('');
-    const [qaLoading, setQaLoading] = useState(false);
-    const [qaSubmitting, setQaSubmitting] = useState(false);
-    const [qaImageBase64, setQaImageBase64] = useState<string | null>(null);
-    const qaImageInputRef = useRef<HTMLInputElement | null>(null);
-
-    // --- Smart consultation (AI chat) state ---
-    const [consultMessages, setConsultMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
-    const [consultInput, setConsultInput] = useState('');
-    const [consultLoading, setConsultLoading] = useState(false);
-
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    const fetchArticles = async () => {
-        try {
-            const resp = await fetch(`${API_BASE}/articles`, {
-                credentials: 'include',
-                headers: buildAuthHeaders()
-            });
-            if (resp.ok) {
-                const data = await resp.json();
-                setArticles(data.items);
-            }
-        } catch (e) { console.error('获取文章失败'); }
-    };
-
-    const fetchQaList = async () => {
-        setQaLoading(true);
-        try {
-            const resp = await fetch(`${API_BASE}/qa/questions`, {
-                credentials: 'include',
-                headers: buildAuthHeaders()
-            });
-            if (resp.ok) {
-                const data = await resp.json();
-                setQaList(data.items || []);
-            }
-        } catch (e) { console.error('获取问答列表失败', e); }
-        finally { setQaLoading(false); }
-    };
-
-    const submitQuestion = async () => {
-        if (!qaText.trim()) { setError('请输入问题内容'); return; }
-        if (!qaImageBase64) { setError('请选择一张影像图片附件'); return; }
-        setQaSubmitting(true);
-        try {
-            const resp = await fetch(`${API_BASE}/qa/questions`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: buildAuthHeaders(true),
-                body: JSON.stringify({ text: qaText.trim(), image: qaImageBase64 })
-            });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.detail || '提问失败');
-            setQaText('');
-            setQaImageBase64(null);
-            await fetchQaList();
-        } catch (e: any) { setError(e.message || '提问失败'); }
-        finally { setQaSubmitting(false); }
-    };
-
-    const deleteQuestion = async (qid: number) => {
-        if (!window.confirm('确认删除该提问吗？')) return;
-        try {
-            const resp = await fetch(`${API_BASE}/qa/questions/${qid}`, {
-                method: 'DELETE',
-                credentials: 'include',
-                headers: buildAuthHeaders()
-            });
-            if (resp.ok) await fetchQaList();
-        } catch (e) { setError('删除失败'); }
-    };
-
-    const handleQaImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const f = e.target.files?.[0];
-        if (!f) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => setQaImageBase64(ev.target?.result as string);
-        reader.readAsDataURL(f);
-    };
-
-    const sendConsult = async () => {
-        const msg = consultInput.trim();
-        if (!msg) return;
-        setConsultLoading(true);
-        setConsultMessages(prev => [...prev, { role: 'user', text: msg }]);
-        setConsultInput('');
-        try {
-            const resp = await fetch(`${API_BASE}/user/ai-consult`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: buildAuthHeaders(true),
-                body: JSON.stringify({ message: msg })
-            });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.detail || 'AI 问诊调用失败');
-            setConsultMessages(prev => [...prev, { role: 'assistant', text: data.reply || '未返回内容' }]);
-        } catch (e: any) {
-            setConsultMessages(prev => [...prev, { role: 'assistant', text: `调用失败：${e.message}` }]);
-        } finally { setConsultLoading(false); }
-    };
 
     const fetchPredictionHistory = async () => {
         try {
@@ -197,10 +94,8 @@ export default function UserDashboard() {
 
     useEffect(() => {
         fetchPredictionHistory();
-        fetchArticles();
         fetchBoneAgePoints();
         fetchBoneAgeTrend();
-        fetchQaList();
     }, []);
 
     const handleLogout = () => {
@@ -524,28 +419,6 @@ export default function UserDashboard() {
                         restoreHistoryItem={restoreHistoryItem}
                         setActiveTab={setActiveTab}
                         updatePrediction={updatePrediction}
-                    />
-                )}
-
-                {activeTab === 'community' && (
-                    <CommunityTab 
-                        consultMessages={consultMessages}
-                        consultInput={consultInput}
-                        setConsultInput={setConsultInput}
-                        sendConsult={sendConsult}
-                        consultLoading={consultLoading}
-                        articles={articles}
-                        qaList={qaList}
-                        qaLoading={qaLoading}
-                        fetchQaList={fetchQaList}
-                        qaText={qaText}
-                        setQaText={setQaText}
-                        qaImageInputRef={qaImageInputRef}
-                        handleQaImageSelect={handleQaImageSelect}
-                        qaImageBase64={qaImageBase64}
-                        submitQuestion={submitQuestion}
-                        qaSubmitting={qaSubmitting}
-                        deleteQuestion={deleteQuestion}
                     />
                 )}
             </main>

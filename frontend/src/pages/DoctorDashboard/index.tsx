@@ -8,18 +8,15 @@ import styles from './DoctorDashboard.module.css';
 
 // --- Types ---
 import type { 
-    PredictionRecord, PredictionDetail, PatientUser, QaItem, ManagedAccount 
+    PredictionRecord, PredictionDetail, PatientUser, ManagedAccount 
 } from './types';
 import type { 
-    ActiveTab, ChatMessage 
+    ActiveTab
 } from './types';
 
 // --- Components ---
 import DoctorSidebar from './components/DoctorSidebar';
 import RecordsTab from './components/RecordsTab';
-import ArticlesTab from './components/ArticlesTab';
-import QaTab from './components/QaTab';
-import AiAssistantTab from './components/AiAssistantTab';
 import AccountsTab from './components/AccountsTab';
 import { PredictionModal, DetailModal } from './components/Modals';
 
@@ -43,15 +40,6 @@ export default function DoctorDashboard() {
   const [predictionSubmitting, setPredictionSubmitting] = useState(false);
   const [predictionMutationId, setPredictionMutationId] = useState<string | null>(null);
   const [predictionMessage, setPredictionMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
-  const [newArticle, setNewArticle] = useState({ title: '', content: '' });
-  const [qaList, setQaList] = useState<QaItem[]>([]);
-  const [qaLoading, setQaLoading] = useState(false);
-  const [replyTexts, setReplyTexts] = useState<Record<number, string>>({});
-  const [replySubmitting, setReplySubmitting] = useState<Record<number, boolean>>({});
-  const [expandedQid, setExpandedQid] = useState<number | null>(null);
-  const [aiInput, setAiInput] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -62,7 +50,6 @@ export default function DoctorDashboard() {
   useEffect(() => {
     void fetchRecords();
     void fetchPatientUsers();
-    void fetchDoctorQaList();
   }, []);
 
   useEffect(() => {
@@ -104,20 +91,6 @@ export default function DoctorDashboard() {
       setPredictionMessage({ type: 'error', text: error instanceof Error ? error.message : '加载个人用户列表失败' });
     } finally {
       setPatientsLoading(false);
-    }
-  };
-
-  const fetchDoctorQaList = async () => {
-    setQaLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/qa/questions`, { credentials: 'include', headers: buildAuthHeaders() });
-      if (!response.ok) throw new Error(await readErrorMessage(response));
-      const data = await response.json();
-      setQaList(Array.isArray(data.items) ? data.items : []);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setQaLoading(false);
     }
   };
 
@@ -206,73 +179,6 @@ export default function DoctorDashboard() {
       setPredictionMessage({ type: 'error', text: error instanceof Error ? error.message : '删除预测记录失败' });
     } finally {
       setPredictionMutationId(null);
-    }
-  };
-
-  const replyToQuestion = async (qid: number) => {
-    const reply = replyTexts[qid]?.trim();
-    if (!reply) return;
-    setReplySubmitting((previous) => ({ ...previous, [qid]: true }));
-    try {
-      const response = await fetch(`${API_BASE}/qa/questions/${qid}/reply`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: buildAuthHeaders(true),
-        body: JSON.stringify({ reply }),
-      });
-      if (!response.ok) throw new Error(await readErrorMessage(response));
-      setReplyTexts((previous) => ({ ...previous, [qid]: '' }));
-      await fetchDoctorQaList();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : '提交回复失败');
-    } finally {
-      setReplySubmitting((previous) => ({ ...previous, [qid]: false }));
-    }
-  };
-
-  const submitArticle = async () => {
-    if (!newArticle.title.trim() || !newArticle.content.trim()) return alert('请填写完整的文章标题和内容。');
-    try {
-      const response = await fetch(`${API_BASE}/articles`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: buildAuthHeaders(true),
-        body: JSON.stringify(newArticle),
-      });
-      if (!response.ok) throw new Error(await readErrorMessage(response));
-      setNewArticle({ title: '', content: '' });
-      alert('科普文章发布成功。');
-    } catch (error) {
-      alert(error instanceof Error ? error.message : '文章发布失败');
-    }
-  };
-
-  const askAiAssistant = async () => {
-    const message = aiInput.trim();
-    if (!message) return;
-    setAiLoading(true);
-    setAiMessages((previous) => [...previous, { role: 'user', text: message }]);
-    setAiInput('');
-    try {
-      const response = await fetch(`${API_BASE}/doctor/ai-assistant`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: buildAuthHeaders(true),
-        body: JSON.stringify({
-            message,
-            prediction_id: selectedRecord?.id || undefined,
-            context: selectedRecord
-              ? { predicted_age_years: selectedRecord.predicted_age_years, gender: selectedRecord.gender, anomalies: selectedRecord.anomalies }
-              : undefined,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'AI 助手请求失败');
-      setAiMessages((previous) => [...previous, { role: 'assistant', text: data.reply || '未返回内容。' }]);
-    } catch (error) {
-      setAiMessages((previous) => [...previous, { role: 'assistant', text: `调用失败：${error instanceof Error ? error.message : '未知错误'}` }]);
-    } finally {
-      setAiLoading(false);
     }
   };
 
@@ -372,38 +278,6 @@ export default function DoctorDashboard() {
             viewDetails={viewDetails}
             deletePredictionRecord={deletePredictionRecord}
             predictionMutationId={predictionMutationId}
-          />
-        )}
-
-        {activeTab === 'articles' && (
-          <ArticlesTab 
-            newArticle={newArticle}
-            setNewArticle={setNewArticle}
-            submitArticle={submitArticle}
-          />
-        )}
-
-        {activeTab === 'qa' && (
-          <QaTab 
-            qaList={qaList}
-            qaLoading={qaLoading}
-            fetchDoctorQaList={fetchDoctorQaList}
-            expandedQid={expandedQid}
-            setExpandedQid={setExpandedQid}
-            replyTexts={replyTexts}
-            setReplyTexts={setReplyTexts}
-            replyToQuestion={replyToQuestion}
-            replySubmitting={replySubmitting}
-          />
-        )}
-
-        {activeTab === 'ai' && (
-          <AiAssistantTab 
-            aiMessages={aiMessages}
-            aiInput={aiInput}
-            setAiInput={setAiInput}
-            askAiAssistant={askAiAssistant}
-            aiLoading={aiLoading}
           />
         )}
 

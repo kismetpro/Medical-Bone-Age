@@ -1,12 +1,13 @@
 import React from 'react';
-import { Activity, Users, FileText, CheckCircle, Bot, ShieldCheck, User as UserIcon, LogOut } from 'lucide-react';
+import { Activity, Users, FileText, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../DoctorDashboard.module.css';
 import type { ActiveTab } from '../types';
 
 interface DoctorSidebarProps {
     isSuperAdmin: boolean;
-    activeTab: ActiveTab;
-    setActiveTab: (tab: ActiveTab) => void;
+    activeTab?: ActiveTab;
+    setActiveTab?: (tab: ActiveTab) => void;
     username: string | null;
     displayRole: string;
     logout: () => void;
@@ -14,26 +15,67 @@ interface DoctorSidebarProps {
 }
 
 const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
-    isSuperAdmin, activeTab, setActiveTab, username, displayRole, logout, navigate
+    isSuperAdmin, activeTab, setActiveTab, username, displayRole, logout, navigate: _navigate
 }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const isDashboard = location.pathname === '/doctor-dashboard';
+    const isConsultation = location.pathname === '/consultation';
+    const isCommunity = location.pathname === '/community';
+
     return (
         <aside className={styles.sidebar}>
-            <div className={styles.brand}>
+            <div className={styles.brand} style={{ cursor: 'pointer' }} onClick={() => navigate('/doctor-dashboard')}>
                 <Activity size={24} color="#3b82f6" />
-                <span>{isSuperAdmin ? '超级管理员工作台' : '临床医生工作台'}</span>
+                <span>{isSuperAdmin ? '超级管理员' : '临床医生'}</span>
             </div>
             <nav className={styles.sideNav}>
-                <button className={`${styles.navItem} ${activeTab === 'records' ? styles.active : ''}`} onClick={() => setActiveTab('records')}><Users size={18} />患者记录</button>
-                <button className={`${styles.navItem} ${activeTab === 'articles' ? styles.active : ''}`} onClick={() => setActiveTab('articles')}><FileText size={18} />健康科普</button>
-                <button className={`${styles.navItem} ${activeTab === 'qa' ? styles.active : ''}`} onClick={() => setActiveTab('qa')}><CheckCircle size={18} />问答回复</button>
-                <button className={`${styles.navItem} ${activeTab === 'ai' ? styles.active : ''}`} onClick={() => setActiveTab('ai')}><Bot size={18} />AI 助手</button>
-                {isSuperAdmin && <button className={`${styles.navItem} ${activeTab === 'accounts' ? styles.active : ''}`} onClick={() => setActiveTab('accounts')}><ShieldCheck size={18} />账号管理</button>}
+                <button 
+                    className={`${styles.navItem} ${isDashboard && activeTab === 'records' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (isDashboard && setActiveTab) setActiveTab('records');
+                        else navigate('/doctor-dashboard');
+                    }}
+                >
+                    <Users size={18} /> 患者记录
+                </button>
+                
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
+                
+                <button 
+                    className={`${styles.navItem} ${isConsultation ? styles.active : ''}`} 
+                    onClick={() => navigate('/consultation')}
+                >
+                    <Bot size={18} /> AI 助手
+                </button>
+                
+                <button 
+                    className={`${styles.navItem} ${isCommunity ? styles.active : ''}`} 
+                    onClick={() => navigate('/community')}
+                >
+                    <MessageSquare size={18} /> 问答社区
+                </button>
+
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
+
+                {isSuperAdmin && (
+                    <button 
+                        className={`${styles.navItem} ${isDashboard && activeTab === 'accounts' ? styles.active : ''}`} 
+                        onClick={() => {
+                            if (isDashboard && setActiveTab) setActiveTab('accounts');
+                            else navigate('/doctor-dashboard');
+                        }}
+                    >
+                        <ShieldCheck size={18} /> 账号管理
+                    </button>
+                )}
             </nav>
             <div className={styles.userProfile}>
                 <div className={styles.userInfo}>
                     <UserIcon size={20} color="#cbd5e1" />
-                    <div>
-                        <span className={styles.username}>{username}</span>
+                    <div style={{ overflow: 'hidden' }}>
+                        <span className={styles.username} style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>{username}</span>
                         <span className={styles.roleBadge}>{displayRole}</span>
                     </div>
                 </div>

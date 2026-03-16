@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import UserDashboard from './pages/UserDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
+import Community from './pages/Community';
+import Consultation from './pages/Consultation';
 import AiPet from './components/AiPet'; // 导入新组件
 import './App.css';
 
@@ -38,7 +40,6 @@ const ProtectedRoute = ({
 function App() {
   return (
     <div className="app-main-layout">
-      {/* 1. 路由配置 */}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<Auth />} />
@@ -58,10 +59,26 @@ function App() {
             </ProtectedRoute>
           )}
         />
+        <Route
+          path="/consultation"
+          element={(
+            <ProtectedRoute allowedRoles={['user', 'doctor', 'super_admin']}>
+              <Consultation />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/community"
+          element={(
+            <ProtectedRoute allowedRoles={['user', 'doctor', 'super_admin']}>
+              <Community />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {/* 2. 在路由外侧挂载 AI 小精灵，使其在所有页面保持存在 */}
+      {/* 在路由外侧挂载 AI 小精灵，使其在所有页面保持存在 */}
       <AiPet />
     </div>
   );
