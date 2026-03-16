@@ -95,6 +95,50 @@ const PredictTab: React.FC<PredictTabProps> = ({
                     </div>
                 </div>
 
+                <div className={styles.preprocessingCard}>
+                    <div className={styles.flexBetween}>
+                        <div className={styles.preText}>
+                            <strong>高级图像预处理</strong>
+                            <p>提升低对比度影像的 AI 识别率</p>
+                        </div>
+                        <label className={styles.switch}>
+                            <input 
+                                type="checkbox" 
+                                checked={imgSettings.usePreprocessing} 
+                                onChange={(e) => setImgSettings({ ...imgSettings, usePreprocessing: e.target.checked })} 
+                            />
+                            <span className={styles.slider}></span>
+                        </label>
+                    </div>
+
+                    {imgSettings.usePreprocessing && (
+                        <div className={styles.preContent}>
+                            <div className={styles.preRow}>
+                                <label>曝光度偏移 (Beta)</label>
+                                <div className={styles.rangeWrapper}>
+                                    <input 
+                                        type="range" min="-100" max="100" step="1" 
+                                        value={imgSettings.brightness - 100} 
+                                        onChange={(e) => setImgSettings({ ...imgSettings, brightness: Number(e.target.value) + 100 })} 
+                                    />
+                                    <span>{imgSettings.brightness - 100}</span>
+                                </div>
+                            </div>
+                            <div className={styles.preRow}>
+                                <label>对比度系数 (Alpha)</label>
+                                <div className={styles.inputWrapper}>
+                                    <input 
+                                        type="number" step="0.01" 
+                                        value={imgSettings.contrast} 
+                                        onChange={(e) => setImgSettings({ ...imgSettings, contrast: Number(e.target.value) })} 
+                                    />
+                                    <small>建议值: 13.24</small>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <button className={styles.btnAnalyze} onClick={handleSubmit} disabled={(!file && !preview) || loading}>
                     {loading ? '系统推断中...' : <><Activity size={18} /> 开始分析与出具报告</>}
                 </button>

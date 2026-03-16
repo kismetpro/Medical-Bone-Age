@@ -185,6 +185,9 @@ export default function UserDashboard() {
                 gender,
                 currentHeight,
                 realAge,
+                preprocessingEnabled: imgSettings.usePreprocessing,
+                brightness: imgSettings.brightness - 100,
+                contrast: imgSettings.contrast,
                 headers: buildAuthHeaders(),
             });
             const newResult = normalizePredictionResult<PredictionResult>(data, realAge);
@@ -313,7 +316,9 @@ export default function UserDashboard() {
     };
 
     const imageStyle: React.CSSProperties = {
-        filter: `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}%) invert(${imgSettings.invert ? 100 : 0}%)`,
+        filter: imgSettings.usePreprocessing 
+            ? `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast * 100}%) invert(${imgSettings.invert ? 100 : 0}%)`
+            : `brightness(100%) contrast(100%) invert(${imgSettings.invert ? 100 : 0}%)`,
         transform: `scale(${imgSettings.scale})`,
         transition: 'filter 0.2s ease, transform 0.2s ease'
     };

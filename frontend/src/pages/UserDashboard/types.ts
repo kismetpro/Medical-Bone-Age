@@ -62,11 +62,13 @@ export interface ImageSettings {
     contrast: number;
     invert: boolean;
     scale: number;
+    usePreprocessing: boolean;
 }
 
 export const DEFAULT_SETTINGS: ImageSettings = {
     brightness: 100,
-    contrast: 100,
+    contrast: 13.24,
     invert: false,
-    scale: 1
+    scale: 1,
+    usePreprocessing: false
 };

@@ -9,12 +9,44 @@ const CommunityPage: React.FC = () => {
     const { role, username } = useAuth();
     const isDoctor = role === 'doctor' || role === 'super_admin';
 
-    // 科普文章状态
-    const [articles, setArticles] = useState<any[]>([]);
+    // 科普文章状态 (添加示例内容)
+    const [articles, setArticles] = useState<any[]>([
+        {
+            id: 'sample-1',
+            title: '【深度科普】孩子长高必看的骨龄知识',
+            author_name: '李医生',
+            created_at: new Date().toISOString(),
+            content: '骨龄是评估儿童青少年发育状况的核心指标。通过观察手腕部X光片中骨化中心出现的时间、大小及骨骺愈合情况，医生可以精确判断孩子的生物年龄。如果骨龄提前或落后于实际年龄1年以上，建议及时咨询内分泌专家。'
+        },
+        {
+            id: 'sample-2',
+            title: '如何科学规划饮食助力身高增长？',
+            author_name: '张营养师',
+            created_at: new Date().toISOString(),
+            content: '除了遗传，后天的营养与运动至关重要。建议每日摄入优质蛋白（如牛奶、鸡蛋、牛肉），保证充足的钙质来源。同时，跳绳、篮球等纵向运动能有效刺激骨骺板，助力长高。注意：过早摄入过量补品可能会导致骨骺提前闭合。'
+        }
+    ]);
     const [newArticle, setNewArticle] = useState({ title: '', content: '' });
 
-    // 问答列表状态
-    const [qaList, setQaList] = useState<any[]>([]);
+    // 问答列表状态 (添加示例问答)
+    const [qaList, setQaList] = useState<any[]>([
+        {
+            qid: 9991,
+            owner: '快乐小家长',
+            text: '我家孩子现在8岁，测出骨龄快10岁了，身高130cm，这算提前发育吗？',
+            createTime: new Date().toISOString(),
+            reply: '您好。骨龄提前两岁属于显著提前，建议结合性腺激素检测。如果预测终身高不理想，可咨询是否需要干预。保持充足睡眠（22点前入睡）对生长激素分泌非常关键。',
+            image: null
+        },
+        {
+            qid: 9992,
+            owner: '球球妈妈',
+            text: '医生您好，日常补充维生素D3对骨骼发育有帮助吗？',
+            createTime: new Date().toISOString(),
+            reply: '有帮助。VD3能促进钙吸收。但在补充前建议先检测血清25-OH-VD水平，在医生指导下制定补充计划，避免过量。',
+            image: null
+        }
+    ]);
     const [qaLoading, setQaLoading] = useState(false);
     const [qaText, setQaText] = useState('');
     const [qaSubmitting, setQaSubmitting] = useState(false);
@@ -33,7 +65,13 @@ const CommunityPage: React.FC = () => {
             });
             if (resp.ok) {
                 const data = await resp.json();
-                setArticles(data.items || []);
+                const fetched = data.items || [];
+                // 保留示例内容，同时追加真实内容
+                setArticles(prev => {
+                    const samples = prev.filter(a => String(a.id).startsWith('sample-'));
+                    const realItems = fetched.filter((f: any) => !String(f.id).startsWith('sample-'));
+                    return [...samples, ...realItems];
+                });
             }
         } catch (e) { console.error('获取文章失败'); }
     };
@@ -47,7 +85,12 @@ const CommunityPage: React.FC = () => {
             });
             if (resp.ok) {
                 const data = await resp.json();
-                setQaList(data.items || []);
+                const fetched = data.items || [];
+                setQaList(prev => {
+                    const samples = prev.filter(q => q.qid >= 9000);
+                    const realItems = fetched.filter((f: any) => f.qid < 9000);
+                    return [...samples, ...realItems];
+                });
             }
         } catch (e) { console.error('获取问答列表失败', e); }
         finally { setQaLoading(false); }

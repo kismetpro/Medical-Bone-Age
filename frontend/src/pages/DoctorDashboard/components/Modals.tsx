@@ -6,8 +6,24 @@ import type { PredictionDetail, PatientUser } from '../types';
 
 interface PredictionModalProps {
     closePredictionModal: () => void;
-    predictionForm: { targetUserId: string; gender: 'male' | 'female'; currentHeight: string; realAge: string };
-    setPredictionForm: React.Dispatch<React.SetStateAction<{ targetUserId: string; gender: 'male' | 'female'; currentHeight: string; realAge: string }>>;
+    predictionForm: { 
+        targetUserId: string; 
+        gender: 'male' | 'female'; 
+        currentHeight: string; 
+        realAge: string;
+        preprocessingEnabled: boolean;
+        brightness: number;
+        contrast: number;
+    };
+    setPredictionForm: React.Dispatch<React.SetStateAction<{ 
+        targetUserId: string; 
+        gender: 'male' | 'female'; 
+        currentHeight: string; 
+        realAge: string;
+        preprocessingEnabled: boolean;
+        brightness: number;
+        contrast: number;
+    }>>;
     patientsLoading: boolean;
     patientUsers: PatientUser[];
     createPrediction: () => void;
@@ -58,6 +74,44 @@ export const PredictionModal: React.FC<PredictionModalProps> = ({
                                 <input className={styles.formInput} placeholder="当前身高（cm，可选）" value={predictionForm.currentHeight} onChange={(event) => setPredictionForm((previous) => ({ ...previous, currentHeight: event.target.value }))} />
                                 <input className={styles.formInput} placeholder="实际年龄（岁，可选）" value={predictionForm.realAge} onChange={(event) => setPredictionForm((previous) => ({ ...previous, realAge: event.target.value }))} />
                             </div>
+
+                            <div className={styles.preprocessingPanel}>
+                                <div className={styles.preHeader}>
+                                    <span>高级预处理</span>
+                                    <label className={styles.switch}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={predictionForm.preprocessingEnabled} 
+                                            onChange={(e) => setPredictionForm(prev => ({ ...prev, preprocessingEnabled: e.target.checked }))} 
+                                        />
+                                        <span className={styles.slider}></span>
+                                    </label>
+                                </div>
+                                {predictionForm.preprocessingEnabled && (
+                                    <div className={styles.preBody}>
+                                        <div className={styles.preInputGroup}>
+                                            <label>对比度 (Alpha)</label>
+                                            <input 
+                                                type="number" step="0.01" className={styles.preInput} 
+                                                value={predictionForm.contrast} 
+                                                onChange={(e) => setPredictionForm(prev => ({ ...prev, contrast: Number(e.target.value) }))} 
+                                            />
+                                        </div>
+                                        <div className={styles.preInputGroup}>
+                                            <label>亮度偏移 (Beta)</label>
+                                            <div className={styles.preRangeWrapper}>
+                                                <input 
+                                                    type="range" min="-100" max="100" 
+                                                    value={predictionForm.brightness - 100} 
+                                                    onChange={(e) => setPredictionForm(prev => ({ ...prev, brightness: Number(e.target.value) + 100 }))} 
+                                                />
+                                                <span>{predictionForm.brightness - 100}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className={styles.modalFooter}>
                                 <button className={styles.actionBtn} onClick={closePredictionModal}>取消</button>
                                 <button className={styles.primaryActionBtn} onClick={() => void createPrediction()} disabled={predictionSubmitting}><Upload size={15} />{predictionSubmitting ? '预测中...' : '开始预测'}</button>

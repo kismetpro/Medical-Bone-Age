@@ -36,7 +36,23 @@ export default function DoctorDashboard() {
   const [patientUsers, setPatientUsers] = useState<PatientUser[]>([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
   const [predictionModalOpen, setPredictionModalOpen] = useState(false);
-  const [predictionForm, setPredictionForm] = useState<{ targetUserId: string; gender: 'male' | 'female'; currentHeight: string; realAge: string }>({ targetUserId: '', gender: 'male', currentHeight: '', realAge: '' });
+  const [predictionForm, setPredictionForm] = useState<{ 
+    targetUserId: string; 
+    gender: 'male' | 'female'; 
+    currentHeight: string; 
+    realAge: string;
+    preprocessingEnabled: boolean;
+    brightness: number;
+    contrast: number;
+  }>({ 
+    targetUserId: '', 
+    gender: 'male', 
+    currentHeight: '', 
+    realAge: '',
+    preprocessingEnabled: false,
+    brightness: 100,
+    contrast: 13.24
+  });
   const [predictionFile, setPredictionFile] = useState<File | null>(null);
   const [predictionPreview, setPredictionPreview] = useState<string | null>(null);
   const [predictionSubmitting, setPredictionSubmitting] = useState(false);
@@ -115,7 +131,15 @@ export default function DoctorDashboard() {
   const closePredictionModal = () => {
     setPredictionModalOpen(false);
     setPredictionFile(null);
-    setPredictionForm({ targetUserId: '', gender: 'male', currentHeight: '', realAge: '' });
+    setPredictionForm({ 
+      targetUserId: '', 
+      gender: 'male', 
+      currentHeight: '', 
+      realAge: '',
+      preprocessingEnabled: false,
+      brightness: 100,
+      contrast: 13.24 
+    });
     setPredictionPreview((previous) => {
       if (previous) URL.revokeObjectURL(previous);
       return null;
@@ -142,6 +166,9 @@ export default function DoctorDashboard() {
         currentHeight: predictionForm.currentHeight,
         realAge: predictionForm.realAge,
         targetUserId: Number(predictionForm.targetUserId),
+        preprocessingEnabled: predictionForm.preprocessingEnabled,
+        brightness: predictionForm.brightness - 100,
+        contrast: predictionForm.contrast,
         headers: buildAuthHeaders(),
       });
       const selectedPatient = patientUsers.find((item) => String(item.id) === predictionForm.targetUserId);

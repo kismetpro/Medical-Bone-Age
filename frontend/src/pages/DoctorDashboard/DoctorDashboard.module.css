@@ -660,3 +660,116 @@ tr:hover {
     align-items: stretch;
   }
 }
+
+/* --- Preprocessing Panel (Doctor Modal) --- */
+.preprocessingPanel {
+    margin-top: 1.25rem;
+    padding: 1.15rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    border-left: 4px solid #1d4ed8;
+}
+
+.preHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.85rem;
+}
+
+.preHeader span {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 0.95rem;
+}
+
+.preBody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed #cbd5e1;
+}
+
+.preInputGroup {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    align-items: center;
+    gap: 1rem;
+}
+
+.preInputGroup label {
+    font-size: 0.82rem;
+    color: #475569;
+    font-weight: 700;
+}
+
+.preInput {
+    max-width: 100px !important;
+    padding: 0.35rem 0.55rem !important;
+    font-size: 0.88rem !important;
+}
+
+.preRangeWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.preRangeWrapper input {
+    flex: 1;
+}
+
+.preRangeWrapper span {
+    min-width: 28px;
+    font-weight: 700;
+    color: #1d4ed8;
+    font-size: 0.88rem;
+}
+
+/* Switch Component */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: .4s;
+  border-radius: 22px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.switch input:checked + .slider {
+  background-color: #1d4ed8;
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(22px);
+}
