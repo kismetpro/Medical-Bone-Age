@@ -9,6 +9,9 @@ export async function submitPredictionRequest({
   currentHeight,
   realAge,
   targetUserId,
+  preprocessingEnabled = false,
+  brightness = 0,
+  contrast = 1,
   headers = {},
 }: {
   file: File;
@@ -16,6 +19,9 @@ export async function submitPredictionRequest({
   currentHeight?: string | number;
   realAge?: string | number;
   targetUserId?: number;
+  preprocessingEnabled?: boolean;
+  brightness?: number;
+  contrast?: number;
   headers?: Record<string, string>;
 }) {
   const formData = new FormData();
@@ -31,6 +37,11 @@ export async function submitPredictionRequest({
   if (targetUserId !== undefined) {
     formData.append('target_user_id', String(targetUserId));
   }
+
+  // 新增图像预处理参数
+  formData.append('preprocessing_enabled', String(preprocessingEnabled));
+  formData.append('brightness', String(brightness));
+  formData.append('contrast', String(contrast));
 
   const response = await fetch(`${API_BASE}/predict`, {
     method: 'POST',

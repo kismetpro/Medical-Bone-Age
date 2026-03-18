@@ -1429,15 +1429,21 @@ def _resolve_token(request: Request, payload_token: Optional[str]) -> Optional[s
 # ----------------------------
 # Utils
 # ----------------------------
-def preprocess_image(image_bytes: bytes):
+def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0):
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("Could not decode image")
+    
+    # 应用图像增强: contrast (alpha) 和 brightness (beta)
+    # 建议对比度 13.24
+    if contrast != 1.0 or brightness != 0.0:
+        img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
+
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
-    # 步骤2: Resize 到 256×256（如果需要）
-    img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_LINEAR)
+    # 步骤2: Resize 到 256×256
+    img = cv2.resize(img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
     
 
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -2192,6 +2198,9 @@ async def predict_bone_age(
     height: float = Form(None, description="Current height in cm"),
     real_age_years: float = Form(None, description="Chronological age in years"),
     target_user_id: Optional[int] = Form(default=None, description="Personal user id for doctor-created predictions"),
+    preprocessing_enabled: bool = Form(False),
+    brightness: float = Form(0.0),
+    contrast: float = Form(1.0),
 ):
     if not models_ensemble:
         raise HTTPException(status_code=503, detail="Age model not loaded")
@@ -2272,7 +2281,12 @@ async def predict_bone_age(
             joint_semantic_13 = align_joint_semantics(joint_grades)
             joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
 
-        img_tensor = preprocess_image(content).to(device)
+        # 决定是否使用预处理参数
+        if preprocessing_enabled:
+            img_tensor = preprocess_image(content, brightness=brightness, contrast=contrast).to(device)
+        else:
+            img_tensor = preprocess_image(content).to(device)
+        
         pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor)
         pred_years = pred_months / 12.0
 
