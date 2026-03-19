@@ -188,7 +188,7 @@ export default function DoctorDashboard() {
       const response = await fetch(`${API_BASE}/predictions/${id}`, { credentials: 'include', headers: buildAuthHeaders() });
       if (!response.ok) throw new Error(await readErrorMessage(response));
       const data = await response.json();
-      setSelectedRecord(data.data as PredictionDetail);
+      setSelectedRecord(normalizePredictionResult<PredictionDetail>(data.data, data.data?.real_age_years));
     } catch (error) {
       alert(error instanceof Error ? error.message : '加载详情失败');
     }

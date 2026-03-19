@@ -3,7 +3,12 @@ import { History as HistoryIcon } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { normalizePredictionResult, submitPredictionRequest } from '../../lib/prediction';
+import {
+    getHighConfidenceFractures,
+    normalizePredictionResult,
+    resolveForeignObjectDetection,
+    submitPredictionRequest
+} from '../../lib/prediction';
 import { buildAuthHeaders } from '../../lib/api';
 import { API_BASE } from '../../config';
 import styles from './UserDashboard.module.css';
@@ -118,21 +123,17 @@ export default function UserDashboard() {
         };
     };
 
-    const parseAnomalies = (anomalies: any[] | undefined, threshold = 0.45) => {
-        const results = { fractures: [] as any[], foreign_objects: [] as any[] };
-        if (!anomalies) return results;
-        anomalies.forEach(item => {
-            if (item.score < threshold) return;
-            if (item.type.includes('fracture')) results.fractures.push(item);
-            else if (item.type === 'metal') results.foreign_objects.push(item);
-        });
-        return results;
+    const parseAnomalies = (data: PredictionResult | null) => {
+        return {
+            fractures: getHighConfidenceFractures(data?.anomalies),
+            foreign_objects: resolveForeignObjectDetection(data).items,
+        };
     };
 
     const generateMedicalReport = (data: PredictionResult | null) => {
         if (!data) return "分析中...";
-        const { predicted_age_years, gender, anomalies } = data;
-        const parsed = parseAnomalies(anomalies, 0.45);
+        const { predicted_age_years, gender } = data;
+        const parsed = parseAnomalies(data);
 
         let report = `【影像学分析报告】\n`;
         report += `1. 基本信息：受检者性别为${gender === 'male' ? '男' : '女'}，`;
@@ -211,7 +212,7 @@ export default function UserDashboard() {
             });
             if (resp.ok) {
                 const data = await resp.json();
-                const fullItem = data.data as PredictionResult;
+                const fullItem = normalizePredictionResult<PredictionResult>(data.data, data.data?.real_age_years);
                 setResult(fullItem);
                 setGender(fullItem.gender);
                 if (fullItem.real_age_years) setRealAge(fullItem.real_age_years.toString());

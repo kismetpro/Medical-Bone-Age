@@ -402,6 +402,27 @@
   font-size: 0.88rem;
 }
 
+.warningBanner {
+  margin-bottom: 0.95rem;
+  border: 1px solid #f5c26b;
+  background: linear-gradient(135deg, #fff4d6, #fff8e8);
+  color: #8a4b00;
+  border-radius: 12px;
+  padding: 0.78rem 0.88rem;
+  display: grid;
+  gap: 0.28rem;
+  box-shadow: 0 16px 28px -24px rgba(138, 75, 0, 0.55);
+}
+
+.warningBanner strong {
+  font-size: 0.92rem;
+}
+
+.warningBanner span {
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .resultsCard {
   overflow: auto;
 }
