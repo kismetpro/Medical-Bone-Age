@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Activity, Shield, Users, BarChart3, ArrowRight } from 'lucide-react';
+import { Activity, ArrowRight } from 'lucide-react';
 import styles from './Home.module.css';
 
 export default function Home() {

@@ -8,10 +8,13 @@ from typing import Any, Dict, Optional
 import requests
 
 from app.config import (
-    DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_FEISHU_TEMPLATE,
     DEFAULT_WECHAT_TEMPLATE,
     PUSH_RECORDS_DIR,
+)
+from app.utils.foreign_object_detection import (
+    FOREIGN_OBJECT_MESSAGE,
+    build_foreign_object_detection,
 )
 
 
@@ -26,7 +29,7 @@ class NotificationService:
         report_id: str = "",
         is_html: bool = True,
     ) -> str:
-        gender_text = "男性" if report_data.get("gender") == "male" else "女性"
+        gender_text = "男" if report_data.get("gender") == "male" else "女"
         predicted_age_years = report_data.get("predicted_age_years", 0)
         predicted_age_months = report_data.get("predicted_age_months", 0)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -94,24 +97,41 @@ class NotificationService:
         gender_text = "男" if gender == "male" else "女"
         predicted_age_years = report_data.get("predicted_age_years", 0)
         anomalies = report_data.get("anomalies", [])
+        foreign_object_detection = report_data.get("foreign_object_detection")
+        if not isinstance(foreign_object_detection, dict):
+            foreign_object_detection = build_foreign_object_detection(anomalies)
 
-        fractures = [a for a in anomalies if a.get("score", 0) > 0.45 and "fracture" in a.get("type", "")]
-        foreign_objects = [a for a in anomalies if a.get("score", 0) > 0.45 and a.get("type") == "metal"]
+        fractures = [
+            anomaly
+            for anomaly in anomalies
+            if anomaly.get("score", 0) > 0.45 and "fracture" in anomaly.get("type", "")
+        ]
+        foreign_objects = foreign_object_detection.get("items", [])
 
         report = "【影像学分析报告】\n"
-        report += f"1. 基本信息：受检者性别为{gender_text}，测定骨龄约为 {round(predicted_age_years, 1)} 岁。\n\n"
+        report += (
+            f"1. 基本信息：受检者性别为{gender_text}，测定骨龄约为 "
+            f"{round(predicted_age_years, 1)} 岁。\n\n"
+        )
         report += "2. 影像发现：\n"
 
         if fractures:
-            report += f"   - [警告] 在影像中识别到 {len(fractures)} 处疑似骨折区域。建议临床结合压痛点进一步核实。\n"
+            report += (
+                f"   - [警告] 在影像中识别到 {len(fractures)} 处疑似骨折区域，"
+                "建议结合压痛点进一步核实。\n"
+            )
         else:
-            report += "   - 骨骼连续性尚好，未见明显骨折征象。\n"
+            report += "   - 骨骼连续性尚可，未见明显骨折征象。\n"
 
         if foreign_objects:
-            report += f"   - 注意：影像中存在 {len(foreign_objects)} 处高密度异物，可能影响骨龄判断。\n"
+            report += f"   - {foreign_object_detection.get('message') or FOREIGN_OBJECT_MESSAGE}\n"
 
         report += "\n3. 结论建议：\n"
-        report += "   结论：疑似存在外伤性改变。" if fractures else "   结论：骨龄发育符合当前生理阶段。"
+        report += (
+            "   结论：疑似存在外伤性改变。\n"
+            if fractures
+            else "   结论：骨龄发育符合当前生理阶段。\n"
+        )
         return report
 
     @staticmethod
@@ -123,7 +143,6 @@ class NotificationService:
         report_id: str = "",
     ) -> Dict[str, Any]:
         try:
-            # Keep one source of truth: send mail via standalone SMTP script.
             if not NotificationService.SMTP_SCRIPT.exists():
                 raise RuntimeError(f"SMTP script not found: {NotificationService.SMTP_SCRIPT}")
 
@@ -188,7 +207,11 @@ class NotificationService:
         try:
             template = custom_template if custom_template else DEFAULT_WECHAT_TEMPLATE
             content = NotificationService.format_report_template(
-                template, report_data, remarks, report_id, is_html=False
+                template,
+                report_data,
+                remarks,
+                report_id,
+                is_html=False,
             )
             payload = {"msgtype": "markdown", "markdown": {"content": content}}
             response = requests.post(webhook_url, json=payload, timeout=10)
@@ -241,7 +264,11 @@ class NotificationService:
         try:
             template = custom_template if custom_template else DEFAULT_FEISHU_TEMPLATE
             content = NotificationService.format_report_template(
-                template, report_data, remarks, report_id, is_html=False
+                template,
+                report_data,
+                remarks,
+                report_id,
+                is_html=False,
             )
             payload = {"msg_type": "text", "content": {"text": content}}
             response = requests.post(webhook_url, json=payload, timeout=10)
@@ -312,7 +339,7 @@ class NotificationService:
 
             filename = f"push_record_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{report_id}.json"
             filepath = PUSH_RECORDS_DIR / filename
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(record, f, ensure_ascii=False, indent=2)
+            with open(filepath, "w", encoding="utf-8") as file:
+                json.dump(record, file, ensure_ascii=False, indent=2)
         except Exception as exc:
             print(f"保存推送记录失败: {exc}")

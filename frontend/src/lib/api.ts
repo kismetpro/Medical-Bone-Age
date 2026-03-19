@@ -1,5 +1,3 @@
-import { API_BASE } from '../config';
-
 /**
  * 构建认证头
  */

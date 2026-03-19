@@ -26,6 +26,10 @@ from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
 from app.utils.gradcam import GradCAM, overlay_heatmap
+from app.utils.foreign_object_detection import (
+    ANOMALY_SCORE_THRESHOLD,
+    build_foreign_object_detection,
+)
 from app.utils.growth_standards import predict_adult_height
 from app.utils.notification_service import NotificationService
 from app.utils.rus_chn import generate_bone_report
@@ -2244,9 +2248,14 @@ async def predict_bone_age(
         detection_image_base64 = None
         if fracture_detector:
             try:
-                anomalies, detection_image_base64 = fracture_detector.detect(content)
+                anomalies, detection_image_base64 = fracture_detector.detect(
+                    content,
+                    score_threshold=ANOMALY_SCORE_THRESHOLD,
+                )
             except Exception as det_exc:
                 print(f"Fracture detect failed: {det_exc}")
+
+        foreign_object_detection = build_foreign_object_detection(anomalies)
 
         recognized_joints_13 = {
             "hand_side": "unknown",
@@ -2304,6 +2313,7 @@ async def predict_bone_age(
             "gender": gender_lower,
             "real_age_years": real_age_years,
             "anomalies": anomalies,
+            "foreign_object_detection": foreign_object_detection,
             "detection_image_base64": detection_image_base64,
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
@@ -2410,6 +2420,7 @@ def get_prediction_detail(pred_id: str, request: Request):
     data["timestamp"] = row["timestamp"]
     data["real_age_years"] = row["real_age_years"]
     data["user_id"] = int(row["user_id"])
+    data["foreign_object_detection"] = build_foreign_object_detection(data.get("anomalies"))
     usernames = _fetch_usernames_by_ids([int(row["user_id"])])
     if usernames.get(int(row["user_id"])):
         data["username"] = usernames[int(row["user_id"])]
@@ -2443,6 +2454,7 @@ def update_prediction(pred_id: str, payload: PredictionUpdateRequest, request: R
     for key, val in update_fields.items():
         if val is not None:
             full_json[key] = val
+    full_json["foreign_object_detection"] = build_foreign_object_detection(full_json.get("anomalies"))
 
     new_filename = update_fields["filename"] if update_fields["filename"] is not None else row["filename"]
     new_timestamp = int(update_fields["timestamp"]) if update_fields["timestamp"] is not None else int(row["timestamp"])
