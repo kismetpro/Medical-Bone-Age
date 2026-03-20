@@ -62,7 +62,13 @@ export default function Auth() {
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
+      if (!response.ok&&endpoint == "/auth/register") {
+        console.log('Error response:', data);
+        console.log('Error detail:', data.detail);
+        throw new Error( '注册失败');
+      }
+
+      if (!response.ok&&endpoint == "/auth/register") {
         console.log('Error response:', data);
         console.log('Error detail:', data.detail);
         throw new Error( '登录失败');
