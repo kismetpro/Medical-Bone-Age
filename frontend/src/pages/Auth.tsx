@@ -39,7 +39,7 @@ export default function Auth() {
       return next;
     });
     setDoctorKey('');
-    setError(null);
+    // setError(null);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -63,7 +63,9 @@ export default function Auth() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.detail || '认证失败');
+        console.log('Error response:', data);
+        console.log('Error detail:', data.detail);
+        throw new Error( '登录失败');
       }
 
       login({
