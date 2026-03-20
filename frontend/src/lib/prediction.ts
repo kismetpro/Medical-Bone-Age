@@ -1,5 +1,90 @@
 import { API_BASE } from '../config';
 
+export const ANOMALY_ALERT_THRESHOLD = 0.45;
+export const FOREIGN_OBJECT_MESSAGE =
+  '\u68c0\u6d4b\u5230\u5f02\u7269\uff0c\u53ef\u80fd\u5f71\u54cd\u9aa8\u9f84\u5224\u65ad\uff0c\u8bf7\u7ed3\u5408\u539f\u59cb\u5f71\u50cf\u590d\u6838';
+
+const FOREIGN_OBJECT_TYPES = new Set(['foreignbody', 'metal']);
+
+export type AnomalyItem = {
+  type: string;
+  score: number;
+  coord: number[];
+};
+
+export type ForeignObjectDetection = {
+  detected: boolean;
+  count: number;
+  threshold: number;
+  message: string | null;
+  items: AnomalyItem[];
+};
+
+export function buildForeignObjectDetection(anomalies?: AnomalyItem[] | null): ForeignObjectDetection {
+  const items = (Array.isArray(anomalies) ? anomalies : []).filter((item) => {
+    if (!item || typeof item.type !== 'string' || !Number.isFinite(item.score)) {
+      return false;
+    }
+    return item.score >= ANOMALY_ALERT_THRESHOLD && FOREIGN_OBJECT_TYPES.has(item.type.toLowerCase());
+  });
+
+  return {
+    detected: items.length > 0,
+    count: items.length,
+    threshold: ANOMALY_ALERT_THRESHOLD,
+    message: items.length > 0 ? FOREIGN_OBJECT_MESSAGE : null,
+    items,
+  };
+}
+
+export function resolveForeignObjectDetection(
+  source?: {
+    anomalies?: AnomalyItem[] | null;
+    foreign_object_detection?: Partial<ForeignObjectDetection> | null;
+  } | null,
+): ForeignObjectDetection {
+  const fallback = buildForeignObjectDetection(source?.anomalies);
+  const raw = source?.foreign_object_detection;
+
+  if (!raw || typeof raw !== 'object') {
+    return fallback;
+  }
+
+  const items = buildForeignObjectDetection(Array.isArray(raw.items) ? (raw.items as AnomalyItem[]) : source?.anomalies).items;
+
+  return {
+    detected: items.length > 0,
+    count: items.length,
+    threshold: typeof raw.threshold === 'number' ? raw.threshold : fallback.threshold,
+    message: items.length > 0 ? (typeof raw.message === 'string' && raw.message.trim() ? raw.message : FOREIGN_OBJECT_MESSAGE) : null,
+    items,
+  };
+}
+
+export function getHighConfidenceFractures(anomalies?: AnomalyItem[] | null): AnomalyItem[] {
+  return (Array.isArray(anomalies) ? anomalies : []).filter((item) => {
+    if (!item || typeof item.type !== 'string' || !Number.isFinite(item.score)) {
+      return false;
+    }
+    return item.score >= ANOMALY_ALERT_THRESHOLD && item.type.toLowerCase().includes('fracture');
+  });
+}
+
+export function getAnomalyDisplayName(type: string): string {
+  const normalized = type.toLowerCase();
+
+  if (normalized === 'foreignbody') return '\u5f02\u7269';
+  if (normalized === 'metal') return '\u91d1\u5c5e\u5f02\u7269';
+  if (normalized === 'fracture') return '\u9aa8\u6298';
+  if (normalized === 'boneanomaly') return '\u9aa8\u5f02\u5e38';
+  if (normalized === 'bonelesion') return '\u9aa8\u75c5\u7076';
+  if (normalized === 'periostealreaction') return '\u9aa8\u819c\u53cd\u5e94';
+  if (normalized === 'pronatorsign') return '\u65cb\u524d\u808c\u5f81';
+  if (normalized === 'softtissue') return '\u8f6f\u7ec4\u7ec7\u5f02\u5e38';
+  if (normalized === 'text') return '\u6587\u5b57\u4f2a\u5f71';
+  return type || '\u672a\u77e5\u5f02\u5e38';
+}
+
 /**
  * 提交骨龄预测请求
  */
@@ -76,6 +161,10 @@ export function normalizePredictionResult<T>(data: any, inputRealAge?: string | 
   // 确保 ID 和时间戳存在（即使后端在某些流程中未直接返回）
   if (!result.timestamp) {
     result.timestamp = Date.now();
+  }
+
+  if (!result.foreign_object_detection && Array.isArray(result.anomalies)) {
+    result.foreign_object_detection = buildForeignObjectDetection(result.anomalies);
   }
 
   return result as T;

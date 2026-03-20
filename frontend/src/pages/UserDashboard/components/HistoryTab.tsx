@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, History } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Scatter, Line } from 'recharts';
 import katex from 'katex';
 import styles from '../UserDashboard.module.css';

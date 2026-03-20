@@ -1,4 +1,5 @@
 import type { AuthRole } from '../../context/AuthContext';
+import type { AnomalyItem, ForeignObjectDetection } from '../../lib/prediction';
 
 export interface PredictionRecord { 
     id: string; 
@@ -13,7 +14,8 @@ export interface PredictionRecord {
 export interface PredictionDetail extends PredictionRecord { 
     real_age_years?: number; 
     predicted_adult_height?: number; 
-    anomalies?: Array<{ type: string; score: number; coord: number[] }>; 
+    anomalies?: AnomalyItem[];
+    foreign_object_detection?: ForeignObjectDetection;
     heatmap_base64?: string; 
     rus_chn_details?: { total_score?: number }; 
 }

@@ -2,6 +2,11 @@ import React from 'react';
 import type { RefObject } from 'react';
 import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
+import {
+    ANOMALY_ALERT_THRESHOLD,
+    getAnomalyDisplayName,
+    resolveForeignObjectDetection
+} from '../../../lib/prediction';
 import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
@@ -37,6 +42,8 @@ const PredictTab: React.FC<PredictTabProps> = ({
     realAge, setRealAge, currentHeight, setCurrentHeight, handleSubmit, error,
     generateComparisonData, getEvaluation, getBoxStyle, generateMedicalReport
 }) => {
+    const foreignObjectDetection = resolveForeignObjectDetection(result);
+
     return (
         <div className={styles.workspaceGrid}>
             {/* Work Area Left */}
@@ -154,6 +161,13 @@ const PredictTab: React.FC<PredictTabProps> = ({
                             <span className={styles.reportId}>#{result.id.slice(-6)}</span>
                         </div>
 
+                        {foreignObjectDetection.detected && (
+                            <div className={styles.warningBanner}>
+                                <strong>{'\u5f02\u7269\u68c0\u6d4b\u63d0\u793a'}</strong>
+                                <span>{`${foreignObjectDetection.message} (${foreignObjectDetection.count} \u5904\u9ad8\u7f6e\u4fe1\u5ea6\u5f02\u7269)`}</span>
+                            </div>
+                        )}
+
                         <div className={styles.metricsGrid}>
                             <div className={`${styles.metricCard} ${styles.primaryMetric}`}>
                                 <span>评估骨龄为</span>
@@ -220,10 +234,10 @@ const PredictTab: React.FC<PredictTabProps> = ({
                                 <div className={styles.heatmapWrapper}>
                                     <img src={result.heatmap_base64} alt="GradCAM" className={styles.heatmapImg} />
                                     {result.anomalies?.map((item, idx) => (
-                                        item.score > 0.45 && (
+                                        item.score >= ANOMALY_ALERT_THRESHOLD && (
                                             <div key={idx} style={getBoxStyle(item.coord)}>
                                                 <span className={styles.anomalyTag}>
-                                                    {item.type} {Math.round(item.score * 100)}%
+                                                    {getAnomalyDisplayName(item.type)} {Math.round(item.score * 100)}%
                                                 </span>
                                             </div>
                                         )
