@@ -1,3 +1,5 @@
+import type { AnomalyItem, ForeignObjectDetection } from '../../lib/prediction';
+
 export interface RusChnDetail {
     name: string;
     stage: number;
@@ -22,16 +24,13 @@ export interface PredictionResult {
     heatmap_base64?: string;
     detection_image_base64?: string;
     predicted_adult_height?: number;
+    foreign_object_detection?: ForeignObjectDetection;
     joint_detect_13?: {
         hand_side: string;
         detected_count: number;
         plot_image_base64?: string | null;
     };
-    anomalies?: Array<{
-        type: string;
-        score: number;
-        coord: number[];
-    }>;
+    anomalies?: AnomalyItem[];
 }
 
 export interface BoneAgePoint {
