@@ -65,14 +65,23 @@ export default function Auth() {
       if (!response.ok&&endpoint == "/auth/register") {
         console.log('Error response:', data);
         console.log('Error detail:', data.detail);
-        throw new Error( '注册失败');
+        if(data.detail == "Username already exists"){
+          throw new Error('用户名已存在');
+        }else if (data.detail ==  "Password must include upper/lower letters and digits, minimum 8 chars"){
+          throw new Error('密码必须包含大小写和数字，最小8个字符');
+        }
+        else{
+        throw new Error( '登录失败,请注意输入框的输入格式');
       }
+    }
 
       if (!response.ok&&endpoint == "/auth/register") {
         console.log('Error response:', data);
         console.log('Error detail:', data.detail);
-        throw new Error( '登录失败');
+   
+        throw new Error( '登录失败,请注意输入框的输入格式');
       }
+    
 
       login({
         username: data.username,
