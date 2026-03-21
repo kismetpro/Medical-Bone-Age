@@ -12,6 +12,16 @@ export interface RusChnReport {
     target_score_lookup: number;
 }
 
+export interface JointGrade {
+    model_joint?: string;
+    grade_idx?: number;
+    grade_raw?: number;
+    score?: number;
+    status?: 'ok' | 'model_missing' | 'crop_invalid' | 'semantic_imputed' | 'semantic_default';
+    imputed?: boolean;
+    source_joint?: string;
+}
+
 export interface PredictionResult {
     id: string;
     timestamp: number;
@@ -30,6 +40,10 @@ export interface PredictionResult {
         detected_count: number;
         plot_image_base64?: string | null;
     };
+    joint_grades?: Record<string, JointGrade>;
+    joint_semantic_13?: Record<string, JointGrade>;
+    joint_rus_total_score?: number;
+    joint_rus_details?: RusChnDetail[];
     anomalies?: AnomalyItem[];
 }
 
@@ -64,10 +78,11 @@ export interface ImageSettings {
     usePreprocessing: boolean;
 }
 
+
+
 export const DEFAULT_SETTINGS: ImageSettings = {
-    brightness: 100,
-    contrast: 13.24,
-    invert: false,
-    scale: 1,
+brightness: 100, // 亮度初始值为 100%
+    contrast: 1,     // 对比度初始值为 1 (注意这里是 1，不是 100)
+    invert: false,   // 不反相
     usePreprocessing: false
 };

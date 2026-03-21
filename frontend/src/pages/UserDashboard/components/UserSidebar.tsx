@@ -1,11 +1,11 @@
 import React from 'react';
-import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut } from 'lucide-react';
+import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Bone } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'predict' | 'history' | 'community' | 'consultation';
-    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation') => void;
+    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade';
+    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade') => void;
     username: string | null;
     handleLogout: () => void;
 }
@@ -41,6 +41,15 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                     }}
                 >
                     <HistoryIcon size={18} /> 预测记录
+                </button>
+                <button 
+                    className={`${styles.navItem} ${isDashboard && activeTab === 'joint-grade' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (isDashboard && setActiveTab) setActiveTab('joint-grade');
+                        else navigate('/user-dashboard');
+                    }}
+                >
+                    <Bone size={18} /> 小关节分级
                 </button>
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 

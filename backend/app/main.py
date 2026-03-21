@@ -2744,3 +2744,63 @@ def user_ai_consult(payload: UserConsultRequest, request: Request):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"智能问诊失败: {exc}")
+@app.post("/joint-grading")
+
+async def joint_grading_predict(
+    file: UploadFile = File(...),
+    gender: str = Form(..., description="Gender: 'male' or 'female'"),
+):
+    """小关节分级独立接口：仅进行13个小关节的检测与分级"""
+    if not joint_recognizer:
+        raise HTTPException(status_code=503, detail="小关节检测模型未加载")
+    if not joint_grader:
+        raise HTTPException(status_code=503, detail="小关节分级模型未加载")
+
+    gender_lower = gender.lower()
+    if gender_lower not in ["male", "female"]:
+        raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+    try:
+        content = await file.read()
+
+        recognized_joints_13 = {}
+        try:
+            recognized_joints_13 = joint_recognizer.recognize_13(content)
+        except Exception as rec_exc:
+            print(f"Small joint recognize failed: {rec_exc}")
+
+        joint_grades = {}
+        try:
+            joint_grades = joint_grader.predict_detected_joints(
+                content,
+                recognized_joints_13.get("joints", {}),
+                JOINT_IMG_SIZE,
+                IMAGENET_MEAN,
+                IMAGENET_STD,
+            )
+        except Exception as joint_exc:
+            print(f"Joint grading failed: {joint_exc}")
+
+        joint_grades = semantic_align_missing_joint_grades(joint_grades)
+
+        joint_semantic_13 = {}
+        joint_rus_total_score = None
+        joint_rus_details = []
+        if joint_grades:
+            joint_semantic_13 = align_joint_semantics(joint_grades)
+            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "gender": gender_lower,
+            "joint_detect_13": recognized_joints_13,
+            "joint_grades": joint_grades,
+            "joint_semantic_13": joint_semantic_13,
+            "joint_rus_total_score": joint_rus_total_score,
+            "joint_rus_details": joint_rus_details,
+        }
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"小关节分级预测失败: {exc}")

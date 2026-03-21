@@ -1,7 +1,7 @@
 import React from 'react';
 import type { RefObject } from 'react';
 import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell } from 'recharts';
 import {
     ANOMALY_ALERT_THRESHOLD,
     getAnomalyDisplayName,
@@ -43,6 +43,51 @@ const PredictTab: React.FC<PredictTabProps> = ({
     generateComparisonData, getEvaluation, getBoxStyle, generateMedicalReport
 }) => {
     const foreignObjectDetection = resolveForeignObjectDetection(result);
+
+    const generateJointGradeChartData = (result: PredictionResult) => {
+        if (!result.joint_grades) return [];
+        
+        return Object.entries(result.joint_grades)
+            .filter(([_, grade]) => grade.status === 'ok' && grade.grade_raw !== undefined)
+            .map(([jointName, grade]) => {
+                const gradeValue = grade.grade_raw;
+                let color;
+                if (gradeValue <= 4) color = '#22c55e';
+                else if (gradeValue <= 7) color = '#eab308';
+                else if (gradeValue <= 10) color = '#f97316';
+                else color = '#ef4444';
+                
+                return {
+                    joint: jointName,
+                    grade: gradeValue,
+                    confidence: grade.score ? Math.round(grade.score * 100) : 0,
+                    color: color
+                };
+            })
+            .sort((a, b) => b.grade - a.grade);
+    };
+
+    const getPendingJoints = (result: PredictionResult) => {
+        if (!result.joint_grades) return [];
+        
+        return Object.entries(result.joint_grades)
+            .filter(([_, grade]) => grade.status !== 'ok')
+            .map(([jointName]) => jointName);
+    };
+
+    const getRecognizedJointRows = (result: PredictionResult) => {
+        if (!result.joint_grades) return [];
+        
+        return Object.entries(result.joint_grades)
+            .filter(([_, grade]) => grade.status === 'ok' && grade.grade_raw !== undefined)
+            .map(([jointName, grade]) => ({
+                joint: jointName,
+                grade: grade.grade_raw,
+                confidence: grade.score ? Math.round(grade.score * 100) : 0,
+                status: grade.status === 'ok' ? '正常' : grade.status
+            }))
+            .sort((a, b) => b.grade - a.grade);
+    };
 
     return (
         <div className={styles.workspaceGrid}>
@@ -245,6 +290,85 @@ const PredictTab: React.FC<PredictTabProps> = ({
                                 </div>
                             </div>
                         )}
+
+                        {/* {(generateJointGradeChartData(result).length > 0 || getPendingJoints(result).length > 0 ) && ( 
+                            <div className={styles.sectionBlock}> 
+                                <h4>小关节分级柱形图</h4> 
+                                {generateJointGradeChartData(result).length > 0 ? ( 
+                                    <div style={{ height: Math.max( 260 , generateJointGradeChartData(result).length * 34 ), width: '100%', marginTop: '0.8rem' }}> 
+                                        <ResponsiveContainer> 
+                                            <BarChart 
+                                                data={generateJointGradeChartData(result)} 
+                                                layout="vertical" 
+                                                margin={{ top: 5 , right: 26 , left: 20 , bottom: 5 }} 
+                                            > 
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={ false } /> 
+                                                <XAxis type="number" domain={[ 0 , 14 ]} /> 
+                                                <YAxis dataKey="joint" type="category" width={ 86 } /> 
+                                                <Tooltip 
+                                                    cursor={{ fill: 'transparent' }} 
+                                                    formatter={(value: any , name: any , entry: any ) => { 
+                                                        if (name === 'grade') { 
+                                                            return [`${value}`, `分级（置信度 ${entry?.payload?.confidence ?? 0 }%）`]; 
+                                                        } 
+                                                        return [value, name]; 
+                                                    }} 
+                                                /> 
+                                                <Bar dataKey="grade" barSize={ 18 } radius={[ 0 ,4 , 4 , 0 ]}>
+                                                    {generateJointGradeChartData(result).map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    ))}
+                                                </Bar> 
+                                            </BarChart> 
+                                        </ResponsiveContainer> 
+                                    </div> 
+                                ) : ( 
+                                    <div style={{ marginTop: '0.8rem', color: '#64748b', fontSize: '0.9rem' }}>暂无可分级关节，当前均为待定。</div> 
+                                )} 
+                                {getPendingJoints(result).length > 0 && ( 
+                                    <div style={{ marginTop: '0.6rem', color: '#64748b', fontSize: '0.86rem' }}> 
+                                        待定关节：{getPendingJoints(result).join('、')} 
+                                    </div> 
+                                )} 
+                            </div> 
+                        )} 
+
+                        {(getRecognizedJointRows(result).length > 0 || getPendingJoints(result).length > 0 ) && ( 
+                            <div className={styles.sectionBlock}> 
+                                <h4>小关节分级明细表</h4> 
+                                {getRecognizedJointRows(result).length > 0 ? ( 
+                                    <div style={{ marginTop: '0.8rem', overflowX: 'auto' }}> 
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}> 
+                                            <thead> 
+                                                <tr style={{ background: '#f8fafc' }}> 
+                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>关节</th> 
+                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>分级</th> 
+                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>置信度</th> 
+                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>状态</th> 
+                                                </tr> 
+                                            </thead> 
+                                            <tbody> 
+                                                {getRecognizedJointRows(result).map((row) => ( 
+                                                    <tr key={row.joint}> 
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem' }}>{row.joint}</td> 
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontWeight: 700 , fontSize: '0.86rem' }}>{row.grade}</td> 
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem' }}>{row.confidence}%</td> 
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem', color: '#16a34a' }}>{row.status}</td> 
+                                                    </tr> 
+                                                ))} 
+                                            </tbody> 
+                                        </table> 
+                                    </div> 
+                                ) : ( 
+                                    <div style={{ marginTop: '0.8rem', color: '#64748b', fontSize: '0.9rem' }}>暂无已识别的小关节分级结果。</div> 
+                                )} 
+                                {getPendingJoints(result).length > 0 && ( 
+                                    <div style={{ marginTop: '0.65rem', color: '#b45309', fontSize: '0.86rem' }}> 
+                                        待定（未正常识别）：{getPendingJoints(result).join('、')} 
+                                    </div> 
+                                )} 
+                            </div> 
+                        )}  */}
 
                         <div className={styles.textReport}>
                             <pre>{generateMedicalReport(result)}</pre>
