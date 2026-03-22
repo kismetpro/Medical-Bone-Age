@@ -272,9 +272,12 @@
 
 .previewContainer {
   width: 100%;
+  min-height: 290px;
   height: 100%;
   background: #000;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   overflow: hidden;
 }

@@ -1,11 +1,11 @@
 import React from 'react';
-import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Bone, Settings, Image as ImageIcon, Calculator } from 'lucide-react';
+import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Bone, Settings, Image as ImageIcon, Calculator, Edit3 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula';
-    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula') => void;
+    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade';
+    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => void;
     username: string | null;
     handleLogout: () => void;
 }
@@ -59,6 +59,15 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                     }}
                 >
                     <Calculator size={18} /> 公式法预测骨龄
+                </button>
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'manual-grade' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('manual-grade');
+                        if (!isDashboard) navigate('/user-dashboard');
+                    }}
+                >
+                    <Edit3 size={18} /> 手动分级计算
                 </button>
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 

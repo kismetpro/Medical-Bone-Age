@@ -200,6 +200,17 @@
     40% { transform: scale(1); }
 }
 
+.cursor {
+    animation: blink 1s infinite;
+    color: #3b82f6;
+    font-weight: bold;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
 .inputArea {
     padding: 1.5rem 2rem;
     background: white;
@@ -258,6 +269,63 @@
 .sendBtn:disabled {
     background: #cbd5e1;
     cursor: not-allowed;
+}
+
+.imageBtn {
+    background: transparent;
+    color: #64748b;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.imageBtn:hover {
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+.imagePreviewContainer {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 0.75rem;
+}
+
+.imagePreview {
+    max-width: 150px;
+    max-height: 100px;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    object-fit: cover;
+}
+
+.removeImageBtn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.removeImageBtn:hover {
+    background: #dc2626;
+    transform: scale(1.1);
 }
 
 @media (max-width: 768px) {

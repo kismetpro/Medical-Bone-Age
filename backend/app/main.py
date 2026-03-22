@@ -2,10 +2,13 @@ import os
 import base64
 import hashlib
 import hmac
+import json
 import requests
 import secrets
 import sqlite3
 import re
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,6 +25,7 @@ import matplotlib.pyplot as plt
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
@@ -1433,6 +1437,20 @@ def _resolve_token(request: Request, payload_token: Optional[str]) -> Optional[s
 # ----------------------------
 # Utils
 # ----------------------------
+def preprocess_image_bytes(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0) -> bytes:
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("Could not decode image")
+    
+    if contrast != 1.0 or brightness != 0.0:
+        img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
+    
+    ok, buffer = cv2.imencode(".jpg", img)
+    if not ok:
+        raise ValueError("Could not encode image")
+    return buffer.tobytes()
+
 def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0):
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -2014,11 +2032,18 @@ def _fit_bone_age_trend(points: List[sqlite3.Row]) -> Dict[str, Any]:
 
     x = np.array(x_rows, dtype=np.float64)
     y = np.array(y_vals, dtype=np.float64)
-    coeff, *_ = np.linalg.lstsq(x, y, rcond=None)
-    y_hat = x @ coeff
-    ss_res = float(np.sum((y - y_hat) ** 2))
-    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 1e-9 else 1.0
+    try:
+        coeff, *_ = np.linalg.lstsq(x, y, rcond=None)
+        y_hat = x @ coeff
+        ss_res = float(np.sum((y - y_hat) ** 2))
+        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+        r2 = 1.0 - ss_res / ss_tot if ss_tot > 1e-9 else 1.0
+    except np.linalg.LinAlgError:
+        return {
+            "enough": False,
+            "message": "Linear regression failed due to singular matrix",
+            "latex": r"\hat{y}= \beta_0 + \beta_1 t + \beta_2 a",
+        }
 
     b0, b1, b2 = coeff.tolist()
     latex = (
@@ -2089,14 +2114,14 @@ def qa_create_question(payload: QaCreateRequest, request: Request):
     if not image.startswith("data:image/"):
         raise HTTPException(status_code=400, detail="Invalid image format")
 
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = _to_iso(_utc_now())
     with get_auth_conn() as conn:
         conn.execute(
             """
             INSERT INTO qa_questions (owner_user_id, owner_username, question_text, image_base64, reply_text, created_at, updated_at)
             VALUES (?, ?, ?, ?, '', ?, ?)
             """,
-            (int(session["user_id"]), session["username"], text, image, now, now),
+            (int(session["user_id"]), session["username"], text, image, now_iso, now_iso),
         )
         qid = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         conn.commit()
@@ -2111,11 +2136,11 @@ def qa_reply_question(qid: int, payload: QaReplyRequest, request: Request):
     if not reply:
         raise HTTPException(status_code=400, detail="Reply cannot be empty")
 
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = _to_iso(_utc_now())
     with get_auth_conn() as conn:
         cur = conn.execute(
             "UPDATE qa_questions SET reply_text = ?, updated_at = ? WHERE id = ?",
-            (reply, now, qid),
+            (reply, now_iso, qid),
         )
         conn.commit()
         if cur.rowcount <= 0:
@@ -2199,8 +2224,8 @@ async def predict_bone_age(
     request: Request,
     file: UploadFile = File(...),
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
-    height: float = Form(None, description="Current height in cm"),
-    real_age_years: float = Form(None, description="Chronological age in years"),
+    height: Optional[float] = Form(None, description="Current height in cm"),
+    real_age_years: Optional[float] = Form(None, description="Chronological age in years"),
     target_user_id: Optional[int] = Form(default=None, description="Personal user id for doctor-created predictions"),
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
@@ -2331,10 +2356,7 @@ async def predict_bone_age(
             result_payload["username"] = owner_username
 
         # Save to database if session exists
-        import json
         if owner_user_id is not None:
-            import time
-            import uuid
 
             pred_id = str(uuid.uuid4())
             now_ts = int(time.time() * 1000)
@@ -2413,8 +2435,6 @@ def get_prediction_detail(pred_id: str, request: Request):
     session = _require_session(request)
     row = _fetch_prediction_row_for_session(pred_id, session)
 
-    import json
-
     data = json.loads(row["full_json"])
     data["id"] = pred_id
     data["timestamp"] = row["timestamp"]
@@ -2431,8 +2451,6 @@ def get_prediction_detail(pred_id: str, request: Request):
 def update_prediction(pred_id: str, payload: PredictionUpdateRequest, request: Request):
     session = _require_session(request)
     row = _fetch_prediction_row_for_session(pred_id, session)
-
-    import json
 
     full_json = json.loads(row["full_json"])
     update_fields = {
@@ -2637,7 +2655,7 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
 
 
 @app.post("/doctor/ai-assistant")
-def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
+async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
     _require_doctor(request)
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured")
@@ -2660,37 +2678,51 @@ def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
         user_prompt = user_prompt + "\n\n" + "\n".join(context_chunks)
 
     api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-    try:
-        resp = requests.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": DEEPSEEK_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-            },
-            timeout=45,
-        )
-        if not resp.ok:
-            raise HTTPException(status_code=resp.status_code, detail=f"DeepSeek API error: {resp.text[:800]}")
-        data = resp.json()
-        choices = data.get("choices", [])
-        if not choices:
-            raise HTTPException(status_code=502, detail="DeepSeek API returned empty choices")
-        content = choices[0].get("message", {}).get("content", "").strip()
-        if not content:
-            raise HTTPException(status_code=502, detail="DeepSeek API returned empty content")
-        return {"success": True, "reply": content, "model": data.get("model", DEEPSEEK_MODEL)}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"AI assistant failed: {exc}")
+
+    async def generate_stream():
+        try:
+            resp = requests.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DEEPSEEK_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "temperature": 0.2,
+                    "stream": True,
+                },
+                timeout=60,
+                stream=True,
+            )
+            if not resp.ok:
+                yield f"data: {json.dumps({'error': f'DeepSeek API error: {resp.text[:400]}'})}\n\n"
+                return
+
+            for line in resp.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    if line_text.startswith('data: '):
+                        data_str = line_text[6:]
+                        if data_str == '[DONE]':
+                            yield "data: [DONE]\n\n"
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            content = delta.get('content', '')
+                            if content:
+                                yield f"data: {json.dumps({'content': content})}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': f'AI assistant failed: {exc}'})}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 class UserConsultRequest(BaseModel):
@@ -2698,7 +2730,7 @@ class UserConsultRequest(BaseModel):
 
 
 @app.post("/user/ai-consult")
-def user_ai_consult(payload: UserConsultRequest, request: Request):
+async def user_ai_consult(payload: UserConsultRequest, request: Request):
     """患者智能问诊接口：任意已登录用户均可调用，prompt 偏向健康科普与就医指导。"""
     _require_session(request)
     if not DEEPSEEK_API_KEY:
@@ -2713,37 +2745,137 @@ def user_ai_consult(payload: UserConsultRequest, request: Request):
     )
 
     api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-    try:
-        resp = requests.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": DEEPSEEK_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": payload.message.strip()},
-                ],
-                "temperature": 0.4,
-            },
-            timeout=45,
-        )
-        if not resp.ok:
-            raise HTTPException(status_code=resp.status_code, detail=f"AI 服务调用失败: {resp.text[:400]}")
-        data = resp.json()
-        choices = data.get("choices", [])
-        if not choices:
-            raise HTTPException(status_code=502, detail="AI 服务返回空结果")
-        content = choices[0].get("message", {}).get("content", "").strip()
-        if not content:
-            raise HTTPException(status_code=502, detail="AI 服务返回了空内容")
-        return {"success": True, "reply": content, "model": data.get("model", DEEPSEEK_MODEL)}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"智能问诊失败: {exc}")
+
+    async def generate_stream():
+        try:
+            resp = requests.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DEEPSEEK_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": payload.message.strip()},
+                    ],
+                    "temperature": 0.4,
+                    "stream": True,
+                },
+                timeout=60,
+                stream=True,
+            )
+            if not resp.ok:
+                yield f"data: {json.dumps({'error': f'AI 服务调用失败: {resp.text[:400]}'})}\n\n"
+                return
+
+            for line in resp.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    if line_text.startswith('data: '):
+                        data_str = line_text[6:]
+                        if data_str == '[DONE]':
+                            yield "data: [DONE]\n\n"
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            content = delta.get('content', '')
+                            if content:
+                                yield f"data: {json.dumps({'content': content})}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': f'智能问诊失败: {exc}'})}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+class ImageConsultRequest(BaseModel):
+    message: str = Field(default="", max_length=2000)
+    image_base64: str = Field(..., description="Base64 encoded image data")
+
+
+@app.post("/user/ai-consult-image")
+async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Request):
+    """患者智能问诊接口（支持图片）：用户可上传X光片等图片进行问诊"""
+    _require_session(request)
+    if not DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥")
+
+    system_prompt = (
+        "你是一位友好、专业的骨龄与儿童生长发育健康顾问。"
+        "你的角色是向患者及家长提供通俗易懂的健康科普解释，帮助他们理解骨龄概念、发育规律以及相关注意事项。"
+        "请用温和、清晰、易理解的语言回答，避免使用晦涩的专业术语。"
+        "对于需要临床检查或诊断的问题，请明确建议用户就诊，不替代医生专业判断。"
+        "回答时请结构清晰，必要时使用条目列表。"
+        "如果用户上传了X光片图片，请仔细观察并给出专业的解读建议。"
+    )
+
+    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
+
+    user_content = []
+    if payload.message.strip():
+        user_content.append({"type": "text", "text": payload.message.strip()})
+    else:
+        user_content.append({"type": "text", "text": "请帮我分析这张图片"})
+
+    if payload.image_base64:
+        image_data = payload.image_base64
+        if not image_data.startswith('data:'):
+            image_data = f"data:image/jpeg;base64,{image_data}"
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": image_data}
+        })
+
+    async def generate_stream():
+        try:
+            resp = requests.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DEEPSEEK_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0.4,
+                    "stream": True,
+                },
+                timeout=120,
+                stream=True,
+            )
+            if not resp.ok:
+                yield f"data: {json.dumps({'error': f'AI 服务调用失败: {resp.text[:400]}'})}\n\n"
+                return
+
+            for line in resp.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    if line_text.startswith('data: '):
+                        data_str = line_text[6:]
+                        if data_str == '[DONE]':
+                            yield "data: [DONE]\n\n"
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            content = delta.get('content', '')
+                            if content:
+                                yield f"data: {json.dumps({'content': content})}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': f'智能问诊失败: {exc}'})}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
 # @app.post("/joint-grading")
 
 # async def joint_grading_predict(
@@ -2773,6 +2905,9 @@ def user_ai_consult(payload: UserConsultRequest, request: Request):
 async def joint_grading_predict(
     file: UploadFile = File(...),
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
+    preprocessing_enabled: bool = Form(False),
+    brightness: float = Form(0.0),
+    contrast: float = Form(1.0),
 ):
     """小关节分级独立接口：仅进行13个小关节的检测与分级"""
     if not joint_grader:
@@ -2785,7 +2920,11 @@ async def joint_grading_predict(
     try:
         content = await file.read()
 
-        # 参考 /predict 接口的处理方式，设置默认的空关节数据
+        if preprocessing_enabled:
+            processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+        else:
+            processed_content = content
+
         recognized_joints_13 = {
             "hand_side": "unknown",
             "detected_count": 0,
@@ -2793,17 +2932,16 @@ async def joint_grading_predict(
             "plot_image_base64": None,
         }
         
-        # 可选的小关节识别：如果模型存在则执行，否则使用空数据
         if joint_recognizer:
             try:
-                recognized_joints_13 = joint_recognizer.recognize_13(content)
+                recognized_joints_13 = joint_recognizer.recognize_13(processed_content)
             except Exception as rec_exc:
                 print(f"Small joint recognize failed: {rec_exc}")
 
         joint_grades = {}
         try:
             joint_grades = joint_grader.predict_detected_joints(
-                content,
+                processed_content,
                 recognized_joints_13.get("joints", {}),
                 JOINT_IMG_SIZE,
                 IMAGENET_MEAN,
@@ -2853,8 +2991,6 @@ async def formula_calculation(
         raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
 
     try:
-        import json
-        
         # 解析关节框数据
         try:
             joint_boxes = json.loads(joints)
@@ -2869,13 +3005,13 @@ async def formula_calculation(
             joint_id = joint_box.get("id")
             if joint_id in RUS_13:
                 detected_joints[joint_id] = {
-                    "bbox": [
+                    "bbox_xyxy": [
                         joint_box.get("x", 0),
                         joint_box.get("y", 0),
                         joint_box.get("x", 0) + joint_box.get("width", 0),
                         joint_box.get("y", 0) + joint_box.get("height", 0)
                     ],
-                    "confidence": 1.0  # 用户手动绘制的，置信度为1.0
+                    "score": 1.0
                 }
 
         # 调用关节分级模型
@@ -2927,6 +3063,66 @@ async def formula_calculation(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"公式计算失败: {exc}")
+
+
+class ManualGradeRequest(BaseModel):
+    gender: str = Field(..., description="Gender: 'male' or 'female'")
+    grades: Dict[str, int] = Field(..., description="Joint grades, e.g., {'Radius': 5, 'Ulna': 4, ...}")
+
+
+@app.post("/manual-grade-calculation")
+async def manual_grade_calculation(request: ManualGradeRequest):
+    """
+    手动输入关节分级计算骨龄接口：
+    用户手动输入13个小关节的分级（0-14级），系统计算RUS总分和骨龄。
+    """
+    gender_lower = request.gender.lower()
+    if gender_lower not in ["male", "female"]:
+        raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+    grades = request.grades
+    
+    joint_semantic_13 = {}
+    for joint_name in RUS_13:
+        grade_raw = grades.get(joint_name)
+        if grade_raw is not None:
+            joint_semantic_13[joint_name] = {
+                "grade_raw": int(grade_raw),
+                "score": 1.0,
+                "status": "ok",
+                "imputed": False,
+                "source_joint": joint_name,
+            }
+        else:
+            joint_semantic_13[joint_name] = {
+                "grade_raw": 0,
+                "score": 0.0,
+                "status": "missing",
+                "imputed": True,
+                "source_joint": joint_name,
+            }
+
+    total_score, rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+    bone_age = calc_bone_age_from_score(total_score, gender_lower)
+
+    joint_count = len([g for g in grades.values() if g is not None])
+    confidence = (joint_count / len(RUS_13)) * 100
+
+    return {
+        "success": True,
+        "gender": gender_lower,
+        "formula_name": "RUS-CHN 骨龄评估公式",
+        "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
+        "formula_expression": get_formula_expression(gender_lower),
+        "total_score": total_score,
+        "bone_age": round(bone_age, 2),
+        "confidence": round(confidence, 1),
+        "joint_grades": {k: {"grade_raw": v} for k, v in grades.items() if v is not None},
+        "joint_semantic_13": joint_semantic_13,
+        "joint_rus_details": rus_details,
+        "joint_count": joint_count,
+        "total_joints": len(RUS_13)
+    }
 
 
 def get_formula_expression(gender: str) -> str:

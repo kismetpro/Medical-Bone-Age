@@ -30,6 +30,7 @@ import JointGradeTab from './components/JointGradeTab';
 import SettingsTab from './components/SettingsTab';
 import FormulaMethodTab from './components/FormulaMethodTab';
 import ImagePreprocessingTab from './components/ImagePreprocessingTab';
+import ManualGradeTab from './components/ManualGradeTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
@@ -49,7 +50,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -325,10 +326,12 @@ export default function UserDashboard() {
 
     const imageStyle: React.CSSProperties = {
         filter: imgSettings.usePreprocessing 
-            ? `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast * 100}%) invert(${imgSettings.invert ? 100 : 0}%)`
-            : `brightness(100%) contrast(100%) invert(${imgSettings.invert ? 100 : 0}%)`,
-        transform: `scale(${imgSettings.scale})`,
-        transition: 'filter 0.2s ease, transform 0.2s ease'
+            ? `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`
+            : `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`,
+        transform: `scale(${imgSettings.scale / 100})`,
+        transition: 'filter 0.2s ease, transform 0.2s ease',
+        maxWidth: '100%',
+        borderRadius: '8px'
     };
 
     const trendData = boneAgePoints.map((p) => {
@@ -566,6 +569,13 @@ return (
                                 setResult={setJointResult} 
                             />
                         </div>
+                    </div>
+                )}
+
+                {/* --- 手动分级计算 Tab --- */}
+                {activeTab === 'manual-grade' && (
+                    <div className={styles.jointContainer}>
+                        <ManualGradeTab result={null} />
                     </div>
                 )}
 

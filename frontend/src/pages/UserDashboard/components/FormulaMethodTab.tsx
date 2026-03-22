@@ -91,9 +91,10 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
 
     const imageStyle = useMemo(() => ({
         filter: `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`,
+        transform: `scale(${imgSettings.scale / 100})`,
         maxWidth: '100%',
         borderRadius: '8px',
-        transition: 'filter 0.2s ease'
+        transition: 'filter 0.2s ease, transform 0.2s ease'
     }), [imgSettings]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,7 +223,6 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
         setFormulaResult(RUS_CHN_FORMULA);
     };
 
-    // 自动划分小关节框
     const autoDetectJoints = async () => {
         if (!file || !preview) {
             setError('请先上传 X 光影像图片');
@@ -233,11 +233,16 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
         setError(null);
 
         try {
-            const data = await detectJoints(file, gender, realAge, imgSettings.usePreprocessing);
+            const data = await detectJoints(
+                file, 
+                gender, 
+                realAge, 
+                imgSettings.usePreprocessing,
+                imgSettings.brightness - 100,
+                imgSettings.contrast
+            );
             
-            // 转换后端返回的关节框数据
             const detectedJoints: JointBox[] = (data.joints || []).map((joint: any) => {
-                // 确保 bbox 存在且是数组
                 const bbox = joint.bbox && Array.isArray(joint.bbox) ? joint.bbox : [0, 0, 0, 0];
                 return {
                     id: joint.id,
@@ -254,7 +259,6 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
 
             setJointBoxes(detectedJoints);
             
-            // 调用公式计算
             await calculateFormulaResult(detectedJoints);
             
         } catch (err: any) {
@@ -559,15 +563,68 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
 
                     <div className={styles.preprocessingCard}>
                         <div className={styles.flexBetween}>
-                            <label className={styles.checkboxLabel}>
+                            <div className={styles.preText}>
+                                <strong>高级图像预处理</strong>
+                                <p>提升低对比度影像的识别率</p>
+                            </div>
+                            <label className={styles.switch}>
                                 <input 
                                     type="checkbox" 
                                     checked={imgSettings.usePreprocessing}
                                     onChange={(e) => setImgSettings({ ...imgSettings, usePreprocessing: e.target.checked })}
                                 />
-                                启用图像预处理
+                                <span className={styles.slider}></span>
                             </label>
                         </div>
+
+                        {imgSettings.usePreprocessing && (
+                            <div className={styles.preContent}>
+                                <div className={styles.preRow}>
+                                    <label>曝光度偏移 (Beta)</label>
+                                    <div className={styles.rangeWrapper}>
+                                        <input 
+                                            type="range" min="-100" max="100" step="1" 
+                                            value={imgSettings.brightness - 100} 
+                                            onChange={(e) => setImgSettings({ ...imgSettings, brightness: Number(e.target.value) + 100 })} 
+                                        />
+                                        <span>{imgSettings.brightness - 100}</span>
+                                    </div>
+                                </div>
+                                <div className={styles.preRow}>
+                                    <label>对比度系数 (Alpha)</label>
+                                    <div className={styles.inputWrapper}>
+                                        <input 
+                                            type="number" step="0.01" 
+                                            value={imgSettings.contrast} 
+                                            onChange={(e) => setImgSettings({ ...imgSettings, contrast: Number(e.target.value) })} 
+                                        />
+                                        <small>建议值: 13.24</small>
+                                    </div>
+                                </div>
+                                <div className={styles.preRow}>
+                                    <label>缩放比例 (%)</label>
+                                    <div className={styles.rangeWrapper}>
+                                        <input 
+                                            type="range" min="50" max="150" step="1" 
+                                            value={imgSettings.scale} 
+                                            onChange={(e) => setImgSettings({ ...imgSettings, scale: Number(e.target.value) })} 
+                                        />
+                                        <span>{imgSettings.scale}%</span>
+                                    </div>
+                                </div>
+                                <div className={styles.preRow}>
+                                    <label>反相模式</label>
+                                    <label className={styles.switch} style={{ margin: 0 }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={imgSettings.invert} 
+                                            onChange={(e) => setImgSettings({ ...imgSettings, invert: e.target.checked })} 
+                                        />
+                                        <span className={styles.slider}></span>
+                                    </label>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className={styles.modeSwitchCard}>
