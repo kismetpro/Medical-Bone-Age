@@ -9,7 +9,7 @@ const COOKIE_KEYS = {
 
 const COOKIE_OPTIONS = {
   expires: 30,
-  secure: process.env.NODE_ENV === 'production',
+  secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
   sameSite: 'lax' as const,
   path: '/'
 };

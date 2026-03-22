@@ -61,6 +61,9 @@ export const detectJoints = async (
     const formData = new FormData();
     formData.append('file', file);
     formData.append('gender', gender);
+    if (realAge) {
+        formData.append('real_age_years', realAge);
+    }
     formData.append('preprocessing_enabled', String(usePreprocessing));
     formData.append('brightness', String(brightness));
     formData.append('contrast', String(contrast));

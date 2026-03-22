@@ -1,7 +1,7 @@
 import React from 'react';
 import type { RefObject } from 'react';
 import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
 import {
     ANOMALY_ALERT_THRESHOLD,
     getAnomalyDisplayName,
@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS } from '../types';
 interface PredictTabProps {
     file: File | null;
     preview: string | null;
+    imageSource: 'upload' | 'preprocessing' | 'history' | null;
     imageStyle: React.CSSProperties;
     imgSettings: ImageSettings;
     setImgSettings: (settings: ImageSettings) => void;
@@ -37,57 +38,12 @@ interface PredictTabProps {
 }
 
 const PredictTab: React.FC<PredictTabProps> = ({
-    file, preview, imageStyle, imgSettings, setImgSettings, handleDrop,
+    file, preview, imageSource, imageStyle, imgSettings, setImgSettings, handleDrop,
     fileInputRef, handleFileChange, result, loading, gender, setGender,
     realAge, setRealAge, currentHeight, setCurrentHeight, handleSubmit, error,
     generateComparisonData, getEvaluation, getBoxStyle, generateMedicalReport
 }) => {
     const foreignObjectDetection = resolveForeignObjectDetection(result);
-
-    const generateJointGradeChartData = (result: PredictionResult) => {
-        if (!result.joint_grades) return [];
-        
-        return Object.entries(result.joint_grades)
-            .filter(([_, grade]) => grade.status === 'ok' && grade.grade_raw !== undefined)
-            .map(([jointName, grade]) => {
-                const gradeValue = grade.grade_raw;
-                let color;
-                if (gradeValue <= 4) color = '#22c55e';
-                else if (gradeValue <= 7) color = '#eab308';
-                else if (gradeValue <= 10) color = '#f97316';
-                else color = '#ef4444';
-                
-                return {
-                    joint: jointName,
-                    grade: gradeValue,
-                    confidence: grade.score ? Math.round(grade.score * 100) : 0,
-                    color: color
-                };
-            })
-            .sort((a, b) => b.grade - a.grade);
-    };
-
-    const getPendingJoints = (result: PredictionResult) => {
-        if (!result.joint_grades) return [];
-        
-        return Object.entries(result.joint_grades)
-            .filter(([_, grade]) => grade.status !== 'ok')
-            .map(([jointName]) => jointName);
-    };
-
-    const getRecognizedJointRows = (result: PredictionResult) => {
-        if (!result.joint_grades) return [];
-        
-        return Object.entries(result.joint_grades)
-            .filter(([_, grade]) => grade.status === 'ok' && grade.grade_raw !== undefined)
-            .map(([jointName, grade]) => ({
-                joint: jointName,
-                grade: grade.grade_raw,
-                confidence: grade.score ? Math.round(grade.score * 100) : 0,
-                status: grade.status === 'ok' ? '正常' : grade.status
-            }))
-            .sort((a, b) => b.grade - a.grade);
-    };
 
     return (
         <div className={styles.workspaceGrid}>
@@ -115,6 +71,9 @@ const PredictTab: React.FC<PredictTabProps> = ({
                     {preview ? (
                         <div className={styles.previewContainer}>
                             <img src={preview} alt="X-Ray" className={styles.previewImage} style={imageStyle} />
+                            {imageSource === 'preprocessing' && (
+                                <span className={styles.sourceBadge}>已载入预处理影像</span>
+                            )}
                             <button className={styles.reuploadBtn} onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}><Upload size={14} /> 更换影像</button>
                         </div>
                     ) : (

@@ -1,5 +1,4 @@
 import React, { useState, useRef, useMemo } from 'react';
-import type { RefObject } from 'react';
 import { 
     Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 
 } from 'lucide-react';
@@ -121,7 +120,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                 
                 return { 
                     joint: name, 
-                    grade: g.grade_raw, 
+                    grade: g.grade_raw ?? 0, 
                     confidence: Math.round((g.score || 0) * 100), 
                     color 
                 };
@@ -312,7 +311,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                                         <YAxis dataKey="joint" type="category" width={90} />
                                         <Tooltip 
                                             cursor={{ fill: '#f1f5f9' }}
-                                            formatter={(val, name, props: any) => [`等级: ${val}`, `置信度: ${props.payload.confidence}%`]}
+                                            formatter={(val, _name, props: any) => [`等级: ${val}`, `置信度: ${props.payload.confidence}%`]}
                                         />
                                         <Bar dataKey="grade" barSize={20} radius={[0, 4, 4, 0]}>
                                             {chartData.map((entry, index) => (

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Image as ImageIcon, Send, User } from 'lucide-react';
+import { X, Image as ImageIcon, User } from 'lucide-react';
 import AI_LOGO from '../static/AI_logo.jpg';
 
 interface Message {
