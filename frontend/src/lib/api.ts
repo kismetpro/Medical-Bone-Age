@@ -50,10 +50,20 @@ export const readErrorMessage = async (response: Response) => {
 /**
  * 小关节检测API（使用joint-grading接口）
  */
-export const detectJoints = async (file: File, gender: string, realAge: string, usePreprocessing: boolean) => {
+export const detectJoints = async (
+    file: File, 
+    gender: string, 
+    realAge: string, 
+    usePreprocessing: boolean,
+    brightness: number = 0,
+    contrast: number = 1
+) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('gender', gender);
+    formData.append('preprocessing_enabled', String(usePreprocessing));
+    formData.append('brightness', String(brightness));
+    formData.append('contrast', String(contrast));
 
     const response = await fetch(`${API_BASE}/joint-grading`, {
         method: 'POST',
@@ -67,7 +77,6 @@ export const detectJoints = async (file: File, gender: string, realAge: string, 
 
     const data = await response.json();
     
-    // 转换返回格式为前端需要的格式
     const jointsData = data.joint_detect_13?.joints;
     const jointsArray = jointsData && typeof jointsData === 'object' ? Object.entries(jointsData) : [];
     
@@ -75,9 +84,9 @@ export const detectJoints = async (file: File, gender: string, realAge: string, 
         joints: jointsArray.map(([id, joint]: [string, any]) => ({
             id,
             name: id,
-            bbox: joint.bbox,
+            bbox: joint.bbox_xyxy || joint.bbox,
             grade: data.joint_grades?.[id]?.grade_raw,
-            score: joint.confidence || 1.0,
+            score: joint.score || 1.0,
             status: 'ok'
         })),
         joint_grades: data.joint_grades,

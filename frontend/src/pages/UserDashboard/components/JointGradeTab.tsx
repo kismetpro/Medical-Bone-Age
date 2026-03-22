@@ -32,9 +32,10 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
     // --- 2. 图像样式计算 ---
     const imageStyle = useMemo(() => ({
         filter: `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`,
+        transform: `scale(${imgSettings.scale / 100})`,
         maxWidth: '100%',
         borderRadius: '8px',
-        transition: 'filter 0.2s ease'
+        transition: 'filter 0.2s ease, transform 0.2s ease'
     }), [imgSettings]);
 
     // --- 3. 交互逻辑 ---
@@ -74,7 +75,9 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
             if (file) formData.append('file', file);
             formData.append('gender', gender);
             formData.append('real_age', realAge);
-            formData.append('use_preprocessing', String(imgSettings.usePreprocessing));
+            formData.append('preprocessing_enabled', String(imgSettings.usePreprocessing));
+            formData.append('brightness', String(imgSettings.brightness - 100));
+            formData.append('contrast', String(imgSettings.contrast));
 
             const token = localStorage.getItem('boneage_token');
             const headers: Record<string, string> = {};
@@ -235,6 +238,28 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                                     />
                                     <small style={{ marginLeft: '10px', color: '#64748b' }}>建议值: 13.24</small>
                                 </div>
+                            </div>
+                            <div className={styles.preRow}>
+                                <label>缩放比例 (%)</label>
+                                <div className={styles.rangeWrapper}>
+                                    <input 
+                                        type="range" min="50" max="150" step="1" 
+                                        value={imgSettings.scale} 
+                                        onChange={(e) => setImgSettings({ ...imgSettings, scale: Number(e.target.value) })} 
+                                    />
+                                    <span>{imgSettings.scale}%</span>
+                                </div>
+                            </div>
+                            <div className={styles.preRow}>
+                                <label>反相模式</label>
+                                <label className={styles.switch} style={{ margin: 0 }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={imgSettings.invert} 
+                                        onChange={(e) => setImgSettings({ ...imgSettings, invert: e.target.checked })} 
+                                    />
+                                    <span className={styles.slider}></span>
+                                </label>
                             </div>
                         </div>
                     )}
