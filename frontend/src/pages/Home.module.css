@@ -3,6 +3,40 @@
   display: flex;
   flex-direction: column;
   color: #13213e;
+  position: relative;
+}
+
+.backgroundParallax {
+  position: fixed;
+  top: -10%;
+  left: -10%;
+  width: 120%;
+  height: 120%;
+  background-image: url('../static/image.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  opacity: 0.4;
+  z-index: -2;
+  transition: transform 0.1s ease-out;
+  will-change: transform;
+}
+
+.backgroundParallax::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.05) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  pointer-events: none;
 }
 
 .header {
@@ -38,21 +72,52 @@
   color: #38517f;
   padding: 0.5rem 0.9rem;
   border-radius: 999px;
-  transition: background-color 0.2s ease;
+  border: 2px solid rgba(56, 81, 127, 0.2);
+  transition: all 0.3s ease;
+  font-weight: 600;
 }
 
 .loginBtn:hover {
-  background: #edf2ff;
+  background: rgba(102, 126, 234, 0.1);
+  border-color: #667eea;
+  color: #667eea;
 }
 
 .registerBtn {
   text-decoration: none;
   color: #fff;
-  background: linear-gradient(135deg, #e26d3a, #d03b56);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 999px;
   font-weight: 700;
   padding: 0.58rem 1rem;
-  box-shadow: 0 12px 22px -16px rgba(208, 59, 86, 0.7);
+  box-shadow: 0 12px 22px -16px rgba(102, 126, 234, 0.7);
+  transition: all 0.3s ease;
+}
+
+.registerBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px -16px rgba(102, 126, 234, 0.9);
+}
+
+.settingsButton {
+  background: rgba(241, 245, 249, 0.8);
+  border: 2px solid rgba(147, 112, 219, 0.2);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #64748b;
+}
+
+.settingsButton:hover {
+  background: rgba(102, 126, 234, 0.1);
+  border-color: #667eea;
+  color: #667eea;
+  transform: rotate(90deg);
 }
 
 .main {
@@ -73,8 +138,10 @@
   border-radius: 999px;
   font-size: 0.83rem;
   font-weight: 700;
-  color: #153f8d;
-  background: #e7efff;
+  color: #1e40af;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .title {
@@ -82,17 +149,42 @@
   margin: 0;
   line-height: 1.06;
   letter-spacing: -0.03em;
+  position: relative;
+  z-index: 2;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #ffffff;
+}
+
+.title::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120%;
+  height: 150%;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.05) 50%, rgba(0, 0, 0, 0.15) 100%);
+  border-radius: 20px;
+  z-index: -1;
+  filter: blur(20px);
 }
 
 .highlight {
-  color: #d03b56;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
 }
 
 .subtitle {
   margin: 1.35rem auto 0;
-  color: #516079;
+  color: #ffffff;
   max-width: 760px;
   font-size: clamp(0.98rem, 2.2vw, 1.18rem);
+  letter-spacing: 0.08em;
+  line-height: 1.8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .ctaGroup {
@@ -113,6 +205,34 @@
   padding: 0.85rem 1.4rem;
   background: linear-gradient(140deg, #1d4ed8, #1943b3);
   box-shadow: 0 22px 30px -24px rgba(29, 78, 216, 0.75);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.primaryCta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.primaryCta:hover::before {
+  left: 100%;
+}
+
+.primaryCta:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 28px 36px -24px rgba(29, 78, 216, 0.9);
 }
 
 .features {

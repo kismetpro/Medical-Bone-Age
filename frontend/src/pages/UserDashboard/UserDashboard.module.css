@@ -266,19 +266,28 @@
   background: linear-gradient(160deg, #f7fbff, #f2f3ff);
 }
 
+.uploadArea:not(.empty) {
+  cursor: default;
+}
+
 .previewContainer {
   width: 100%;
   height: 100%;
   background: #000;
-  display: grid;
-  place-items: center;
+  display: block;
   position: relative;
+  overflow: hidden;
 }
 
 .previewImage {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .reuploadBtn {
@@ -294,6 +303,13 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reuploadBtn:hover {
+  background: rgba(20, 33, 61, 0.9);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
 .placeholder {
@@ -650,6 +666,84 @@
   margin: 0.15rem 0 0;
   font-size: 0.78rem;
   color: #64748b;
+}
+
+/* --- Mode Switch Card --- */
+.modeSwitchCard {
+  margin-top: 1.2rem;
+  padding: 1.1rem;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 14px;
+  border-left: 4px solid #0284c7;
+}
+
+.modeSwitchCard label {
+  display: block;
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 0.8rem;
+  font-size: 0.9rem;
+}
+
+.modeSwitchCard .radioGroup {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.modeSwitchCard .radioGroup button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #bae6fd;
+  background: white;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #0284c7;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modeSwitchCard .radioGroup button:hover {
+  background: #f0f9ff;
+  border-color: #0284c7;
+}
+
+.modeSwitchCard .radioGroup button.btnActive {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+  border-color: #0284c7;
+}
+
+/* --- Secondary Button --- */
+.btnSecondary {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.btnSecondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .preContent {
@@ -1114,9 +1208,233 @@
   grid-template-columns: repeat(4, 1fr) !important;
 }
 
+/* Formula Method Tab Styles */
+.formulaCard {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+}
+
+.formulaHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #bae6fd;
+}
+
+.formulaHeader h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.formulaContent {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.formulaItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  border: 1px solid #e0f2fe;
+}
+
+.formulaItem label {
+  font-weight: 600;
+  color: #075985;
+  min-width: 120px;
+  font-size: 0.9rem;
+}
+
+.formulaValue {
+  font-weight: 700;
+  color: #0c4a6e;
+  font-size: 1rem;
+}
+
+.formulaMath {
+  background: #0c4a6e;
+  color: #f0f9ff;
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.formulaDescription {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+  font-size: 0.9rem;
+  color: #075985;
+  line-height: 1.6;
+}
+
+.jointsCard {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(20, 33, 61, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.jointsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.jointItem {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.jointItem:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.jointItem.selected {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.jointHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.jointName {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.jointColor {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.jointStatus {
+  display: flex;
+  align-items: center;
+}
+
+.jointDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.jointDetail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.detailLabel {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.detailValue {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.chartCard {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(20, 33, 61, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.chartCard h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.iconButton {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.iconButton:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.loadingOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loadingOverlay p {
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1rem;
+}
+
 @media (max-width: 1180px) {
   .metricsGrid {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .jointsList {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
 }
 

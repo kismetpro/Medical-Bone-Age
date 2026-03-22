@@ -10,7 +10,7 @@ import {
     resolveForeignObjectDetection,
     submitPredictionRequest
 } from '../../lib/prediction';
-import { buildAuthHeaders } from '../../lib/api';
+import { buildAuthHeaders, readErrorMessage } from '../../lib/api';
 import { API_BASE } from '../../config';
 import styles from './UserDashboard.module.css';
 
@@ -26,8 +26,10 @@ import PredictTab from './components/PredictTab';
 import HistoryTab from './components/HistoryTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
-
 import JointGradeTab from './components/JointGradeTab';
+import SettingsTab from './components/SettingsTab';
+import FormulaMethodTab from './components/FormulaMethodTab';
+import ImagePreprocessingTab from './components/ImagePreprocessingTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
@@ -47,7 +49,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -248,7 +250,7 @@ export default function UserDashboard() {
                 body: JSON.stringify({ predicted_age_years: parsedAge })
             });
             const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.detail || '修改失败');
+            if (!resp.ok) throw new Error(await readErrorMessage(resp));
             await fetchPredictionHistory();
             await fetchBoneAgePoints();
             await fetchBoneAgeTrend();
@@ -455,7 +457,7 @@ return (
         {/* 1. 侧边栏：状态清理门卫 */}
         <UserSidebar 
             activeTab={activeTab} 
-            setActiveTab={(tab: string) => {
+            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula') => {
                 if (tab !== activeTab) {
                     setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
                     setLoading(false); // 强制停止加载动画
@@ -552,6 +554,36 @@ return (
                             />
                         </div>
                     </div>
+                )}
+
+                {/* --- 公式法预测骨龄 Tab --- */}
+                {activeTab === 'formula' && (
+                    <div className={styles.jointContainer}>
+                        <div className={styles.resultsCard}>
+                            <h3 style={{ marginBottom: '1.2rem' }}>公式法预测骨龄</h3>
+                            <FormulaMethodTab 
+                                result={jointResult} 
+                                setResult={setJointResult} 
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* --- 系统设置 Tab --- */}
+                {activeTab === 'settings' && (
+                    <SettingsTab 
+                        username={username} 
+                        onUpdateSuccess={() => {
+                            console.log('设置已更新');
+                        }}
+                    />
+                )}
+
+                {/* --- 图像预处理 Tab --- */}
+                {activeTab === 'preprocessing' && (
+                    <ImagePreprocessingTab 
+                        username={username} 
+                    />
                 )}
 
                 {/* --- 其他页面逻辑 --- */}

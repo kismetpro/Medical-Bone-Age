@@ -84,5 +84,8 @@ export const DEFAULT_SETTINGS: ImageSettings = {
 brightness: 100, // 亮度初始值为 100%
     contrast: 1,     // 对比度初始值为 1 (注意这里是 1，不是 100)
     invert: false,   // 不反相
-    usePreprocessing: false
+    usePreprocessing: false,
+    scale: 100
 };
+
+export type ActiveTab = 'records' | 'consultation' | 'community' | 'settings' | 'preprocessing';

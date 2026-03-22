@@ -1,11 +1,33 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Activity, ArrowRight } from 'lucide-react';
+import { Activity, ArrowRight, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import CookieSettings from '../components/CookieSettings';
 import styles from './Home.module.css';
 
 export default function Home() {
+    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    const [showCookieSettings, setShowCookieSettings] = useState(false);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            const x = (e.clientX / window.innerWidth - 0.5) * 20;
+            const y = (e.clientY / window.innerHeight - 0.5) * 20;
+            setMousePosition({ x, y });
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, []);
+
     return (
         <div className={styles.homeContainer}>
+            <div 
+                className={styles.backgroundParallax}
+                style={{
+                    transform: `translate(${mousePosition.x * 0.3}px, ${mousePosition.y * 0.3}px)`
+                }}
+            />
             <header className={styles.header}>
                 <div className={styles.logo}>
                     <Activity size={28} color="#3b82f6" />
@@ -14,6 +36,13 @@ export default function Home() {
                 <nav className={styles.nav}>
                     <Link to="/auth" className={styles.loginBtn}>登录</Link>
                     <Link to="/auth" className={styles.registerBtn}>免费注册</Link>
+                    <button
+                        className={styles.settingsButton}
+                        onClick={() => setShowCookieSettings(true)}
+                        aria-label="Cookie设置"
+                    >
+                        <Settings size={18} />
+                    </button>
                 </nav>
             </header>
 
@@ -23,6 +52,9 @@ export default function Home() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
                     className={styles.heroSection}
+                    style={{
+                        transform: `translate(${mousePosition.x * 0.5}px, ${mousePosition.y * 0.5}px)`
+                    }}
                 >
                     <div className={styles.badge}>新一代医疗辅助诊断 AI</div>
                     <h1 className={styles.title}>
@@ -41,6 +73,10 @@ export default function Home() {
 
   
             </main>
+            <CookieSettings 
+                isOpen={showCookieSettings} 
+                onClose={() => setShowCookieSettings(false)} 
+            />
         </div>
     );
 }

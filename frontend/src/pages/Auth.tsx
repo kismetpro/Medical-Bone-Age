@@ -62,26 +62,34 @@ export default function Auth() {
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok&&endpoint == "/auth/register") {
+      if (!response.ok) {
         console.log('Error response:', data);
         console.log('Error detail:', data.detail);
-        if(data.detail == "Username already exists"){
-          throw new Error('用户名已存在');
-        }else if (data.detail ==  "Password must include upper/lower letters and digits, minimum 8 chars"){
-          throw new Error('密码必须包含大小写和数字，最小8个字符');
+        
+        if (endpoint === '/auth/register') {
+          if (data.detail === 'Username already exists') {
+            throw new Error('用户名已存在');
+          } else if (data.detail === 'Password must include upper/lower letters and digits, minimum 8 chars') {
+            throw new Error('密码必须包含大小写字母和数字，至少8个字符');
+          } else if (data.detail === 'Username format invalid') {
+            throw new Error('用户名格式无效，仅支持3-64位字母/数字/_.-');
+          } else if (data.detail === 'Doctor self-register is disabled') {
+            throw new Error('医生自注册已关闭，请联系系统管理员');
+          } else if (data.detail === 'Access denied') {
+            throw new Error('医生注册密钥错误');
+          } else {
+            throw new Error('注册失败，请检查输入信息');
+          }
+        } else {
+          if (data.detail === 'Invalid username or password') {
+            throw new Error('用户名或密码错误');
+          } else if (data.detail === 'Username format invalid') {
+            throw new Error('用户名格式无效');
+          } else {
+            throw new Error('登录失败，请检查用户名和密码');
+          }
         }
-        else{
-        throw new Error( '登录失败,请注意输入框的输入格式');
       }
-    }
-
-      if (!response.ok&&endpoint == "/auth/register") {
-        console.log('Error response:', data);
-        console.log('Error detail:', data.detail);
-   
-        throw new Error( '登录失败,请注意输入框的输入格式');
-      }
-    
 
       login({
         username: data.username,

@@ -32,7 +32,7 @@ from app.utils.foreign_object_detection import (
 )
 from app.utils.growth_standards import predict_adult_height
 from app.utils.notification_service import NotificationService
-from app.utils.rus_chn import generate_bone_report
+from app.utils.rus_chn import generate_bone_report, calc_bone_age_from_score
 
 
 # ----------------------------
@@ -2744,6 +2744,30 @@ def user_ai_consult(payload: UserConsultRequest, request: Request):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"智能问诊失败: {exc}")
+# @app.post("/joint-grading")
+
+# async def joint_grading_predict(
+#     file: UploadFile = File(...),
+#     gender: str = Form(..., description="Gender: 'male' or 'female'"),
+# ):
+#     """小关节分级独立接口：仅进行13个小关节的检测与分级"""
+#     if not joint_recognizer:
+#         raise HTTPException(status_code=503, detail="小关节检测模型未加载")
+#     if not joint_grader:
+#         raise HTTPException(status_code=503, detail="小关节分级模型未加载")
+
+#     gender_lower = gender.lower()
+#     if gender_lower not in ["male", "female"]:
+#         raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+#     try:
+#         content = await file.read()
+
+#         recognized_joints_13 = {}
+#         try:
+#             recognized_joints_13 = joint_recognizer.recognize_13(content)
+#         except Exception as rec_exc:
+#             print(f"Small joint recognize failed: {rec_exc}")
 @app.post("/joint-grading")
 
 async def joint_grading_predict(
@@ -2751,8 +2775,6 @@ async def joint_grading_predict(
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
 ):
     """小关节分级独立接口：仅进行13个小关节的检测与分级"""
-    if not joint_recognizer:
-        raise HTTPException(status_code=503, detail="小关节检测模型未加载")
     if not joint_grader:
         raise HTTPException(status_code=503, detail="小关节分级模型未加载")
 
@@ -2763,11 +2785,20 @@ async def joint_grading_predict(
     try:
         content = await file.read()
 
-        recognized_joints_13 = {}
-        try:
-            recognized_joints_13 = joint_recognizer.recognize_13(content)
-        except Exception as rec_exc:
-            print(f"Small joint recognize failed: {rec_exc}")
+        # 参考 /predict 接口的处理方式，设置默认的空关节数据
+        recognized_joints_13 = {
+            "hand_side": "unknown",
+            "detected_count": 0,
+            "joints": {},
+            "plot_image_base64": None,
+        }
+        
+        # 可选的小关节识别：如果模型存在则执行，否则使用空数据
+        if joint_recognizer:
+            try:
+                recognized_joints_13 = joint_recognizer.recognize_13(content)
+            except Exception as rec_exc:
+                print(f"Small joint recognize failed: {rec_exc}")
 
         joint_grades = {}
         try:
@@ -2804,3 +2835,103 @@ async def joint_grading_predict(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"小关节分级预测失败: {exc}")
+
+
+@app.post("/formula-calculation")
+async def formula_calculation(
+    file: UploadFile = File(...),
+    gender: str = Form(..., description="Gender: 'male' or 'female'"),
+    real_age: str = Form(..., description="Real age in years"),
+    joints: str = Form(..., description="JSON string of joint boxes"),
+):
+    """公式法骨龄计算：使用用户手动绘制的关节框进行分级和公式计算"""
+    if not joint_grader:
+        raise HTTPException(status_code=503, detail="小关节分级模型未加载")
+
+    gender_lower = gender.lower()
+    if gender_lower not in ["male", "female"]:
+        raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+    try:
+        import json
+        
+        # 解析关节框数据
+        try:
+            joint_boxes = json.loads(joints)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid joints JSON format")
+
+        content = await file.read()
+
+        # 将用户绘制的关节框转换为模型需要的格式
+        detected_joints = {}
+        for joint_box in joint_boxes:
+            joint_id = joint_box.get("id")
+            if joint_id in RUS_13:
+                detected_joints[joint_id] = {
+                    "bbox": [
+                        joint_box.get("x", 0),
+                        joint_box.get("y", 0),
+                        joint_box.get("x", 0) + joint_box.get("width", 0),
+                        joint_box.get("y", 0) + joint_box.get("height", 0)
+                    ],
+                    "confidence": 1.0  # 用户手动绘制的，置信度为1.0
+                }
+
+        # 调用关节分级模型
+        joint_grades = {}
+        try:
+            joint_grades = joint_grader.predict_detected_joints(
+                content,
+                detected_joints,
+                JOINT_IMG_SIZE,
+                IMAGENET_MEAN,
+                IMAGENET_STD,
+            )
+        except Exception as joint_exc:
+            print(f"Joint grading failed: {joint_exc}")
+            raise HTTPException(status_code=500, detail=f"关节分级失败: {joint_exc}")
+
+        # 语义对齐和RUS评分计算
+        joint_semantic_13 = align_joint_semantics(joint_grades)
+        total_score, rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+
+        # 使用RUS-CHN公式计算骨龄
+        bone_age = calc_bone_age_from_score(total_score, gender_lower)
+
+        # 计算置信度（基于关节数量和质量）
+        joint_count = len([j for j in joint_grades.values() if j.get("grade_raw") is not None])
+        confidence = (joint_count / len(RUS_13)) * 100
+
+        # 构建返回结果
+        return {
+            "success": True,
+            "filename": file.filename,
+            "gender": gender_lower,
+            "real_age": real_age,
+            "formula_name": "RUS-CHN 骨龄评估公式",
+            "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
+            "formula_expression": get_formula_expression(gender_lower),
+            "total_score": total_score,
+            "bone_age": round(bone_age, 2),
+            "confidence": round(confidence, 1),
+            "joint_grades": joint_grades,
+            "joint_semantic_13": joint_semantic_13,
+            "joint_rus_details": rus_details,
+            "joint_count": joint_count,
+            "total_joints": len(RUS_13)
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"公式计算失败: {exc}")
+
+
+def get_formula_expression(gender: str) -> str:
+    """获取RUS-CHN公式表达式"""
+    if gender == "male":
+        return "骨龄 = 2.018 + (-0.093)×S + 0.0033×S² + (-3.33×10⁻⁵)×S³ + 1.76×10⁻⁷×S⁴ + (-5.60×10⁻¹⁰)×S⁵ + 1.13×10⁻¹²×S⁶ + (-1.45×10⁻¹⁵)×S⁷ + 1.15×10⁻¹⁸×S⁸ + (-5.16×10⁻²²)×S⁹ + 9.94×10⁻²⁶×S¹⁰"
+    else:
+        return "骨龄 = 5.812 + (-0.272)×S + 0.0053×S² + (-4.38×10⁻⁵)×S³ + 2.09×10⁻⁷×S⁴ + (-6.22×10⁻¹⁰)×S⁵ + 1.20×10⁻¹²×S⁶ + (-1.49×10⁻¹⁵)×S⁷ + 1.16×10⁻¹⁸×S⁸ + (-5.13×10⁻²²)×S⁹ + 9.79×10⁻²⁶×S¹⁰"
