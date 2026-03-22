@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Users, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut } from 'lucide-react';
+import { Activity, Users, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut, Settings, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../DoctorDashboard.module.css';
 import type { ActiveTab } from '../types';
@@ -74,6 +74,25 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         <ShieldCheck size={18} /> 账号管理
                     </button>
                 )}
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'preprocessing' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('preprocessing');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
+                >
+                    <ImageIcon size={18} /> 图像预处理
+                </button>
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'settings' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('settings');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
+                >
+                    <Settings size={18} /> 系统设置
+                </button>
             </nav>
             <div className={styles.userProfile}>
                 <div className={styles.userInfo}>

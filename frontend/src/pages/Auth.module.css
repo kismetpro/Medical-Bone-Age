@@ -3,42 +3,100 @@
   padding: 1.1rem;
   display: grid;
   place-items: center;
+  position: relative;
+}
+
+.authContainer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .authCard {
   width: min(510px, 100%);
   border-radius: 24px;
   padding: 2rem 1.4rem 1.45rem;
-  border: 1px solid rgba(20, 33, 61, 0.12);
-  background:
-    linear-gradient(170deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.82)),
-    radial-gradient(300px 140px at 18% -30%, rgba(226, 109, 58, 0.2), transparent);
-  box-shadow: 0 25px 44px -32px rgba(20, 33, 61, 0.48);
+  border: 1px solid rgba(147, 112, 219, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 
+    0 25px 44px -32px rgba(20, 33, 61, 0.48),
+    0 0 0 1px rgba(147, 112, 219, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.authCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 30% 30%, rgba(147, 112, 219, 0.1), transparent 50%);
+  animation: shimmer 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(30%, 30%); }
 }
 
 .headerArea {
   text-align: center;
   margin-bottom: 1.35rem;
+  position: relative;
+  z-index: 1;
 }
 
 .iconPrimary {
-  color: #1d4ed8;
+  color: #667eea;
+  filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.5));
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.5));
+    transform: scale(1);
+  }
+  50% { 
+    filter: drop-shadow(0 0 16px rgba(102, 126, 234, 0.8));
+    transform: scale(1.05);
+  }
 }
 
 .headerArea h2 {
   margin: 0.3rem 0 0.28rem;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.15em;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .headerArea p {
   margin: 0;
   color: #516079;
+  font-weight: 500;
 }
 
 .formArea {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+  position: relative;
+  z-index: 1;
 }
 
 .roleSelector {
@@ -47,7 +105,8 @@
   gap: 0.35rem;
   padding: 0.24rem;
   border-radius: 12px;
-  background: #eef3fb;
+  background: rgba(238, 243, 251, 0.6);
+  border: 1px solid rgba(147, 112, 219, 0.2);
 }
 
 .roleBtn {
@@ -62,12 +121,36 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.roleBtn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  padding: 2px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.roleBtn.active::before {
+  opacity: 1;
 }
 
 .roleBtn.active {
-  background: #fff;
-  color: #1e2f4f;
-  box-shadow: 0 9px 16px -14px rgba(20, 33, 61, 0.6);
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.roleBtn:hover:not(.active) {
+  background: rgba(102, 126, 234, 0.05);
 }
 
 .inputGroup {
@@ -80,30 +163,41 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: #44597f;
+  letter-spacing: 0.02em;
 }
 
 .inputGroup input {
   width: 100%;
-  border: 1px solid #d8e0ef;
+  border: 1px solid rgba(147, 112, 219, 0.3);
   border-radius: 10px;
   padding: 0.72rem 0.8rem;
   outline: none;
-  background: #fff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
 }
 
 .inputGroup input:focus {
-  border-color: #4972d9;
-  box-shadow: 0 0 0 3px rgba(73, 114, 217, 0.14);
+  border-color: #667eea;
+  box-shadow: 
+    0 0 0 3px rgba(102, 126, 234, 0.15),
+    0 4px 12px rgba(102, 126, 234, 0.2);
+  background: rgba(255, 255, 255, 1);
+}
+
+.inputGroup input::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .errorMsg {
   border-radius: 9px;
   padding: 0.65rem 0.72rem;
-  color: #a82544;
-  border: 1px solid #f7bfcc;
-  background: #fff3f6;
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background: rgba(254, 226, 226, 0.9);
   font-size: 0.88rem;
+  backdrop-filter: blur(10px);
 }
 
 .submitBtn {
@@ -114,8 +208,40 @@
   color: #fff;
   font-weight: 800;
   cursor: pointer;
-  background: linear-gradient(140deg, #e26d3a, #d03b56);
-  box-shadow: 0 18px 28px -18px rgba(208, 59, 86, 0.78);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 
+    0 18px 28px -18px rgba(102, 126, 234, 0.6),
+    0 0 0 1px rgba(147, 112, 219, 0.2);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.submitBtn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.submitBtn:hover::before {
+  left: 100%;
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 22px 32px -18px rgba(102, 126, 234, 0.7),
+    0 0 0 1px rgba(147, 112, 219, 0.3),
+    0 0 20px rgba(102, 126, 234, 0.4);
+}
+
+.submitBtn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .submitBtn:disabled {
@@ -127,13 +253,22 @@
 .toggleArea {
   text-align: center;
   margin-top: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .toggleArea button {
   border: none;
   background: none;
-  color: #1d4ed8;
+  color: #667eea;
   font-weight: 700;
   cursor: pointer;
   padding: 0.25rem 0.35rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.toggleArea button:hover {
+  color: #764ba2;
+  text-shadow: 0 0 8px rgba(102, 126, 234, 0.5);
 }

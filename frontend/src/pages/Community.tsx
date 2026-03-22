@@ -154,7 +154,7 @@ const CommunityPage: React.FC = () => {
                 headers: buildAuthHeaders(true),
                 body: JSON.stringify(newArticle)
             });
-            if (!resp.ok) throw new Error('发布失败');
+            if (!resp.ok) throw new Error(await readErrorMessage(resp));
             setNewArticle({ title: '', content: '' });
             alert('发布成功');
             await fetchArticles();

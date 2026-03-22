@@ -6,7 +6,8 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import UserDashboard from './pages/UserDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
-import AiPet from './components/AiPet'; // 导入新组件
+import AiPet from './components/AiPet';
+import CookieBanner from './components/CookieBanner';
 import './App.css';
 
 const ProtectedRoute = ({
@@ -60,8 +61,8 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {/* 在路由外侧挂载 AI 小精灵，使其在所有页面保持存在 */}
       <AiPet />
+      <CookieBanner />
     </div>
   );
 }

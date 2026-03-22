@@ -21,6 +21,8 @@ import AccountsTab from './components/AccountsTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
 import { PredictionModal, DetailModal } from './components/Modals';
+import DoctorSettingsTab from './components/DoctorSettingsTab';
+import DoctorImagePreprocessingTab from './components/DoctorImagePreprocessingTab';
 
 export default function DoctorDashboard() {
   const { username, role, logout } = useAuth();
@@ -329,6 +331,22 @@ export default function DoctorDashboard() {
 
         {activeTab === 'consultation' && <ConsultationPage />}
         {activeTab === 'community' && <CommunityPage />}
+        
+        {activeTab === 'settings' && (
+          <DoctorSettingsTab 
+            username={username}
+            isSuperAdmin={isSuperAdmin}
+            onUpdateSuccess={() => {
+              console.log('设置已更新');
+            }}
+          />
+        )}
+
+        {activeTab === 'preprocessing' && (
+          <DoctorImagePreprocessingTab 
+            username={username}
+          />
+        )}
       </main>
 
       {predictionModalOpen && (

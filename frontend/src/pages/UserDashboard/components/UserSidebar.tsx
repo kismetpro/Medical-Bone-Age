@@ -1,11 +1,11 @@
 import React from 'react';
-import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut } from 'lucide-react';
+import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Bone, Settings, Image as ImageIcon, Calculator } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'predict' | 'history' | 'community' | 'consultation';
-    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation') => void;
+    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula';
+    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula') => void;
     username: string | null;
     handleLogout: () => void;
 }
@@ -42,6 +42,24 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                 >
                     <HistoryIcon size={18} /> 预测记录
                 </button>
+                <button 
+                    className={`${styles.navItem} ${isDashboard && activeTab === 'joint-grade' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (isDashboard && setActiveTab) setActiveTab('joint-grade');
+                        else navigate('/user-dashboard');
+                    }}
+                >
+                    <Bone size={18} /> 小关节分级
+                </button>
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'formula' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('formula');
+                        if (!isDashboard) navigate('/user-dashboard');
+                    }}
+                >
+                    <Calculator size={18} /> 公式法预测骨龄
+                </button>
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
                     className={`${styles.navItem} ${activeTab === 'consultation' ? styles.active : ''}`} 
@@ -60,6 +78,25 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                     }}
                 >
                     <MessageSquare size={18} /> 问答社区
+                </button>
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'preprocessing' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('preprocessing');
+                        if (!isDashboard) navigate('/user-dashboard');
+                    }}
+                >
+                    <ImageIcon size={18} /> 图像预处理
+                </button>
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'settings' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('settings');
+                        if (!isDashboard) navigate('/user-dashboard');
+                    }}
+                >
+                    <Settings size={18} /> 系统设置
                 </button>
             </nav>
 

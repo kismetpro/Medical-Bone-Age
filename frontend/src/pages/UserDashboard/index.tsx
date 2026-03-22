@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { History as HistoryIcon } from 'lucide-react';
+
 import 'katex/dist/katex.min.css';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +10,7 @@ import {
     resolveForeignObjectDetection,
     submitPredictionRequest
 } from '../../lib/prediction';
-import { buildAuthHeaders } from '../../lib/api';
+import { buildAuthHeaders, readErrorMessage } from '../../lib/api';
 import { API_BASE } from '../../config';
 import styles from './UserDashboard.module.css';
 
@@ -25,10 +26,16 @@ import PredictTab from './components/PredictTab';
 import HistoryTab from './components/HistoryTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
+import JointGradeTab from './components/JointGradeTab';
+import SettingsTab from './components/SettingsTab';
+import FormulaMethodTab from './components/FormulaMethodTab';
+import ImagePreprocessingTab from './components/ImagePreprocessingTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
     const navigate = useNavigate();
+    // 1. 增加一个独立的状态，不要共用 result
+    const [jointResult, setJointResult] = useState<PredictionResult | null>(null);
 
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
@@ -42,7 +49,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -243,7 +250,7 @@ export default function UserDashboard() {
                 body: JSON.stringify({ predicted_age_years: parsedAge })
             });
             const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.detail || '修改失败');
+            if (!resp.ok) throw new Error(await readErrorMessage(resp));
             await fetchPredictionHistory();
             await fetchBoneAgePoints();
             await fetchBoneAgeTrend();
@@ -339,100 +346,262 @@ export default function UserDashboard() {
         };
     });
 
-    return (
-        <div className={styles.dashboardLayout}>
-            {/* Sidebar Navigation */}
-            <UserSidebar 
-                activeTab={activeTab} 
-                setActiveTab={setActiveTab} 
-                username={username} 
-                handleLogout={handleLogout} 
-            />
+//     return (
+//         <div className={styles.dashboardLayout}>
+//             {/* Sidebar Navigation */}
+//             <UserSidebar 
+//                 activeTab={activeTab} 
+//                 setActiveTab={setActiveTab} 
+//                 username={username} 
+//                 handleLogout={handleLogout} 
+//             />
 
-            {/* Main Content */}
-            <main className={styles.mainContent}>
-                <header className={styles.topHeader}>
-                    <h2>骨龄与发育评估</h2>
-                    <button className={styles.historyBtn} onClick={() => setShowHistory(!showHistory)}>
-                        <HistoryIcon size={16} /> {showHistory ? '收起最近记录' : '查看最近记录'}
-                    </button>
-                </header>
+//             {/* Main Content */}
+//             <main className={styles.mainContent}>
+//                 <header className={styles.topHeader}>
+//                     <h2>骨龄与发育评估</h2>
+//                     <button className={styles.historyBtn} onClick={() => setShowHistory(!showHistory)}>
+//                         <HistoryIcon size={16} /> {showHistory ? '收起最近记录' : '查看最近记录'}
+//                     </button>
+//                 </header>
 
-                {showHistory && (
-                    <div className={styles.historyPanel}>
-                        <h4>最近的评估</h4>
-                        <div className={styles.historyList}>
-                            {history.length === 0 && <p className={styles.emptyText}>未发现历史记录。</p>}
-                            {history.map(item => (
-                                <div key={item.id} className={styles.historyItem} onClick={() => restoreHistoryItem(item)}>
+//                 {showHistory && (
+//                     <div className={styles.historyPanel}>
+//                         <h4>最近的评估</h4>
+//                         <div className={styles.historyList}>
+//                             {history.length === 0 && <p className={styles.emptyText}>未发现历史记录。</p>}
+//                             {history.map(item => (
+//                                 <div key={item.id} className={styles.historyItem} onClick={() => restoreHistoryItem(item)}>
+//                                     <div className={styles.historyMeta}>
+//                                         <span>{new Date(item.timestamp).toLocaleDateString()}</span>
+//                                         <span className={item.gender === 'male' ? styles.tagMale : styles.tagFemale}>
+//                                             {item.gender === 'male' ? '男' : '女'}
+//                                         </span>
+//                                     </div>
+//                                     <div className={styles.historyScore}>
+//                                         {item.predicted_age_years.toFixed(1)} 岁
+//                                     </div>
+//                                 </div>
+//                             ))}
+//                         </div>
+//                     </div>
+//                 )}
+
+//                 {activeTab === 'predict' && (
+//                     <PredictTab 
+//                         file={file}
+//                         preview={preview}
+//                         imageStyle={imageStyle}
+//                         imgSettings={imgSettings}
+//                         setImgSettings={setImgSettings}
+//                         handleDrop={handleDrop}
+//                         fileInputRef={fileInputRef}
+//                         handleFileChange={handleFileChange}
+//                         result={result}
+//                         loading={loading}
+//                         gender={gender}
+//                         setGender={setGender}
+//                         realAge={realAge}
+//                         setRealAge={setRealAge}
+//                         currentHeight={currentHeight}
+//                         setCurrentHeight={setCurrentHeight}
+//                         handleSubmit={handleSubmit}
+//                         error={error}
+//                         generateComparisonData={generateComparisonData}
+//                         getEvaluation={getEvaluation}
+//                         getBoxStyle={getBoxStyle}
+//                         generateMedicalReport={generateMedicalReport}
+//                     />
+//                 )}
+
+//                 {activeTab === 'history' && (
+//                     <HistoryTab 
+//                         pointTime={pointTime}
+//                         setPointTime={setPointTime}
+//                         pointBoneAge={pointBoneAge}
+//                         setPointBoneAge={setPointBoneAge}
+//                         pointChronAge={pointChronAge}
+//                         setPointChronAge={setPointChronAge}
+//                         pointNote={pointNote}
+//                         setPointNote={setPointNote}
+//                         addPoint={addPoint}
+//                         pointLoading={pointLoading}
+//                         trendData={trendData}
+//                         trend={trend}
+//                         boneAgePoints={boneAgePoints}
+//                         deletePoint={deletePoint}
+//                         history={history}
+//                         restoreHistoryItem={restoreHistoryItem}
+//                         setActiveTab={setActiveTab}
+//                         updatePrediction={updatePrediction}
+//                     />
+//                 )}
+                
+//                 {activeTab === 'consultation' && <ConsultationPage />}
+                
+//                                 {activeTab === 'joint-grade' && (
+//                     <div className={styles.workspaceGrid}>
+//                         <div className={styles.resultsCard} style={{ width: '100%', gridColumn: '1 / -1' }}>
+//                             <h3 style={{ margin: '0 0 1rem 0' }}>小关节分级分析</h3>
+//                             <JointGradeTab result={result} setResult={setResult} />
+//                         </div>
+//                     </div>
+//                 )}
+//             </main>
+//         </div>
+//     );
+// }
+
+return (
+    <div className={styles.dashboardLayout}>
+        {/* 1. 侧边栏：状态清理门卫 */}
+        <UserSidebar 
+            activeTab={activeTab} 
+            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula') => {
+                if (tab !== activeTab) {
+                    setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
+                    setLoading(false); // 强制停止加载动画
+                    setActiveTab(tab);
+                }
+            }} 
+            username={username} 
+            handleLogout={handleLogout} 
+        />
+
+        <main className={styles.mainContent}>
+            {/* 顶部标题栏 */}
+            <header className={styles.topHeader}>
+                <h2>骨龄与发育评估系统 <small className={styles.subVersion}>v2.1</small></h2>
+                <button 
+                    className={styles.historyBtn} 
+                    onClick={() => setShowHistory(!showHistory)}
+                >
+                    <HistoryIcon size={16} /> 
+                    {showHistory ? '收起历史' : '历史记录'}
+                </button>
+            </header>
+
+            {/* 2. 历史面板：严格的类型保护 */}
+            {showHistory && (
+                <div className={styles.historyPanel}>
+                    <h4>最近评估</h4>
+                    <div className={styles.historyList}>
+                        {history && history.length > 0 ? (
+                            history.map(item => (
+                                <div key={item?.id || Math.random()} className={styles.historyItem} onClick={() => restoreHistoryItem?.(item)}>
                                     <div className={styles.historyMeta}>
-                                        <span>{new Date(item.timestamp).toLocaleDateString()}</span>
-                                        <span className={item.gender === 'male' ? styles.tagMale : styles.tagFemale}>
-                                            {item.gender === 'male' ? '男' : '女'}
+                                        <span>{item?.timestamp ? new Date(item.timestamp).toLocaleDateString() : '未知'}</span>
+                                        <span className={item?.gender === 'male' ? styles.tagMale : styles.tagFemale}>
+                                            {item?.gender === 'male' ? '男' : '女'}
                                         </span>
                                     </div>
                                     <div className={styles.historyScore}>
-                                        {item.predicted_age_years.toFixed(1)} 岁
+                                        {/* 关键：防止 item.predicted_age_years 为空时崩溃 */}
+                                        {(Number(item?.predicted_age_years) || 0).toFixed(1)} 岁
                                     </div>
                                 </div>
-                            ))}
+                            ))
+                        ) : (
+                            <p className={styles.emptyText}>暂无数据</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* 3. 核心内容渲染区：使用 key 保证物理隔离，防止不同 Tab 间的 State 污染 */}
+            <div key={activeTab} className={styles.viewPort}>
+                
+                {/* --- 骨龄预测 Tab --- */}
+                {activeTab === 'predict' && (
+                    <PredictTab 
+                        {...{
+                            file, preview, imageStyle, imgSettings, setImgSettings,
+                            handleDrop, fileInputRef, handleFileChange, 
+                            loading, gender, setGender, realAge, setRealAge,
+                            currentHeight, setCurrentHeight, handleSubmit, error
+                        }}
+                        // 显式传入并保护 result
+                        result={result} 
+                        // 容错处理：确保 coord 必须是 4 位数组，否则不渲染框体
+                        getBoxStyle={(coord) => {
+                            if (Array.isArray(coord) && coord.length >= 4) {
+                                return getBoxStyle(coord);
+                            }
+                            return { display: 'none' };
+                        }}
+                        // 容错处理：报告生成异常时不崩溃
+                        generateMedicalReport={(data) => {
+                            try { return generateMedicalReport(data); }
+                            catch (err) { return "报告计算中或数据暂缺..."; }
+                        }}
+                        generateComparisonData={generateComparisonData}
+                        getEvaluation={getEvaluation}
+                    />
+                )}
+
+                {/* --- 小关节分级 Tab --- */}
+                {activeTab === 'joint-grade' && (
+                    <div className={styles.jointContainer}>
+                        <div className={styles.resultsCard}>
+                            <h3 style={{ marginBottom: '1.2rem' }}>小关节成熟度分级</h3>
+                            {/* 重点：使用独立的 jointResult。
+                                即使此处 setResult 被触发，改变的也只是 jointResult，
+                                不会触发 PredictTab 的重新渲染或逻辑报错。
+                            */}
+                            <JointGradeTab 
+                                result={jointResult} 
+                                setResult={setJointResult} 
+                            />
                         </div>
                     </div>
                 )}
 
-                {activeTab === 'predict' && (
-                    <PredictTab 
-                        file={file}
-                        preview={preview}
-                        imageStyle={imageStyle}
-                        imgSettings={imgSettings}
-                        setImgSettings={setImgSettings}
-                        handleDrop={handleDrop}
-                        fileInputRef={fileInputRef}
-                        handleFileChange={handleFileChange}
-                        result={result}
-                        loading={loading}
-                        gender={gender}
-                        setGender={setGender}
-                        realAge={realAge}
-                        setRealAge={setRealAge}
-                        currentHeight={currentHeight}
-                        setCurrentHeight={setCurrentHeight}
-                        handleSubmit={handleSubmit}
-                        error={error}
-                        generateComparisonData={generateComparisonData}
-                        getEvaluation={getEvaluation}
-                        getBoxStyle={getBoxStyle}
-                        generateMedicalReport={generateMedicalReport}
+                {/* --- 公式法预测骨龄 Tab --- */}
+                {activeTab === 'formula' && (
+                    <div className={styles.jointContainer}>
+                        <div className={styles.resultsCard}>
+                            <h3 style={{ marginBottom: '1.2rem' }}>公式法预测骨龄</h3>
+                            <FormulaMethodTab 
+                                result={jointResult} 
+                                setResult={setJointResult} 
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* --- 系统设置 Tab --- */}
+                {activeTab === 'settings' && (
+                    <SettingsTab 
+                        username={username} 
+                        onUpdateSuccess={() => {
+                            console.log('设置已更新');
+                        }}
                     />
                 )}
 
-                {activeTab === 'history' && (
-                    <HistoryTab 
-                        pointTime={pointTime}
-                        setPointTime={setPointTime}
-                        pointBoneAge={pointBoneAge}
-                        setPointBoneAge={setPointBoneAge}
-                        pointChronAge={pointChronAge}
-                        setPointChronAge={setPointChronAge}
-                        pointNote={pointNote}
-                        setPointNote={setPointNote}
-                        addPoint={addPoint}
-                        pointLoading={pointLoading}
-                        trendData={trendData}
-                        trend={trend}
-                        boneAgePoints={boneAgePoints}
-                        deletePoint={deletePoint}
-                        history={history}
-                        restoreHistoryItem={restoreHistoryItem}
-                        setActiveTab={setActiveTab}
-                        updatePrediction={updatePrediction}
+                {/* --- 图像预处理 Tab --- */}
+                {activeTab === 'preprocessing' && (
+                    <ImagePreprocessingTab 
+                        username={username} 
                     />
                 )}
-                
+
+                {/* --- 其他页面逻辑 --- */}
+                {activeTab === 'history' && (
+                    <HistoryTab 
+                        {...{
+                            pointTime, setPointTime, pointBoneAge, setPointBoneAge,
+                            pointChronAge, setPointChronAge, pointNote, setPointNote,
+                            addPoint, pointLoading, trend, boneAgePoints, deletePoint,
+                            history, restoreHistoryItem, setActiveTab, updatePrediction
+                        }}
+                        trendData={trendData || []}
+                    />
+                )}
+
                 {activeTab === 'consultation' && <ConsultationPage />}
                 {activeTab === 'community' && <CommunityPage />}
-            </main>
-        </div>
-    );
-}
+            </div>
+        </main>
+    </div>
+);}

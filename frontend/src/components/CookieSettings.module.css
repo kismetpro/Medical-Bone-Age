@@ -1,0 +1,354 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.header {
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(147, 112, 219, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+}
+
+.headerContent {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.iconWrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #13213e;
+}
+
+.header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #516079;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeButton:hover {
+  background: rgba(147, 112, 219, 0.1);
+  color: #667eea;
+}
+
+.content {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.section {
+  margin-bottom: 1.5rem;
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #13213e;
+}
+
+.description {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #516079;
+  line-height: 1.6;
+}
+
+.cookieTypes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cookieType {
+  border: 2px solid rgba(147, 112, 219, 0.1);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.cookieType:hover {
+  border-color: rgba(102, 126, 234, 0.3);
+  background: rgba(241, 245, 249, 0.5);
+}
+
+.cookieType.necessary {
+  background: rgba(241, 245, 249, 0.3);
+  border-color: rgba(147, 112, 219, 0.2);
+}
+
+.cookieType.active {
+  border-color: rgba(102, 126, 234, 0.4);
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.cookieTypeHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.checkboxWrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(147, 112, 219, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+  background: white;
+}
+
+.checkbox:checked + .checkboxLabel {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.checkbox:disabled + .checkboxLabel {
+  background: rgba(147, 112, 219, 0.2);
+  border-color: rgba(147, 112, 219, 0.3);
+  cursor: not-allowed;
+}
+
+.cookieTypeInfo h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #13213e;
+}
+
+.cookieTypeInfo p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #516079;
+  line-height: 1.4;
+}
+
+.badge {
+  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.managementOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.resetButton,
+.clearButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.resetButton {
+  background: rgba(241, 245, 249, 0.8);
+  color: #516079;
+  border-color: rgba(147, 112, 219, 0.2);
+}
+
+.resetButton:hover {
+  background: rgba(147, 112, 219, 0.1);
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.clearButton {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.clearButton:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #dc2626;
+}
+
+.footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(147, 112, 219, 0.1);
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  background: rgba(241, 245, 249, 0.3);
+}
+
+.cancelButton,
+.saveButton {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.cancelButton {
+  background: rgba(241, 245, 249, 0.8);
+  color: #516079;
+  border-color: rgba(147, 112, 219, 0.2);
+}
+
+.cancelButton:hover {
+  background: rgba(147, 112, 219, 0.1);
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.saveButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.saveButton:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+.saveButton.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 640px) {
+  .modal {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .header,
+  .content,
+  .footer {
+    padding: 1rem;
+  }
+
+  .cookieTypeHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .badge {
+    margin-left: 0;
+  }
+
+  .footer {
+    flex-direction: column;
+  }
+
+  .cancelButton,
+  .saveButton {
+    width: 100%;
+  }
+}
