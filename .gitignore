@@ -16,8 +16,8 @@ frontend/*.tsbuildinfo
 
 
 # 日志文件 & 临时文件
-backend/app/__pycache__/
-backend/app/utils/__pycache__/
+__pycache__/
+*.pyc
 
 # 编辑器和系统文件
 
