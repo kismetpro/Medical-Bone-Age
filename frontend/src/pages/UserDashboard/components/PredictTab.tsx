@@ -1,12 +1,6 @@
 import React from 'react';
 import type { RefObject } from 'react';
 import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
-import {
-    ANOMALY_ALERT_THRESHOLD,
-    getAnomalyDisplayName,
-    resolveForeignObjectDetection
-} from '../../../lib/prediction';
 import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
@@ -14,7 +8,6 @@ import { DEFAULT_SETTINGS } from '../types';
 interface PredictTabProps {
     file: File | null;
     preview: string | null;
-    imageSource: 'upload' | 'preprocessing' | 'history' | null;
     imageStyle: React.CSSProperties;
     imgSettings: ImageSettings;
     setImgSettings: (settings: ImageSettings) => void;
@@ -31,19 +24,27 @@ interface PredictTabProps {
     setCurrentHeight: (height: string) => void;
     handleSubmit: () => void;
     error: string | null;
-    generateComparisonData: (res: PredictionResult) => any[];
     getEvaluation: (boneAge: number, chronoAge: number) => { status: string, color: string, desc: string };
     getBoxStyle: (coord: number[]) => React.CSSProperties;
     generateMedicalReport: (data: PredictionResult | null) => string;
+    imageSource?: 'upload' | 'preprocessing' | 'history' | null;
 }
 
 const PredictTab: React.FC<PredictTabProps> = ({
-    file, preview, imageSource, imageStyle, imgSettings, setImgSettings, handleDrop,
+    file, preview, imageStyle, imgSettings, setImgSettings, handleDrop,
     fileInputRef, handleFileChange, result, loading, gender, setGender,
     realAge, setRealAge, currentHeight, setCurrentHeight, handleSubmit, error,
-    generateComparisonData, getEvaluation, getBoxStyle, generateMedicalReport
+    getEvaluation, getBoxStyle, generateMedicalReport,
+    imageSource
 }) => {
-    const foreignObjectDetection = resolveForeignObjectDetection(result);
+    // 计算年龄差并返回对应表情
+    const getAgeDiffEmoji = (diff: number) => {
+        if (diff <= -1.5) return "😔"; // 严重发育迟缓
+        if (diff < 0) return "🙁";    // 轻度发育迟缓
+        if (diff === 0) return "😊";  // 正常
+        if (diff <= 1.5) return "😯"; // 轻度提早发育
+        return "😡";                  // 严重提早发育
+    };
 
     return (
         <div className={styles.workspaceGrid}>
@@ -70,10 +71,14 @@ const PredictTab: React.FC<PredictTabProps> = ({
                 >
                     {preview ? (
                         <div className={styles.previewContainer}>
-                            <img src={preview} alt="X-Ray" className={styles.previewImage} style={imageStyle} />
-                            {imageSource === 'preprocessing' && (
-                                <span className={styles.sourceBadge}>已载入预处理影像</span>
+                            {imageSource && (
+                                <div className={styles.sourceBadge}>
+                                    {imageSource === 'upload' && '本地上传'}
+                                    {imageSource === 'preprocessing' && '预处理'}
+                                    {imageSource === 'history' && '历史记录'}
+                                </div>
                             )}
+                            <img src={preview} alt="X-Ray" className={styles.previewImage} style={imageStyle} />
                             <button className={styles.reuploadBtn} onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}><Upload size={14} /> 更换影像</button>
                         </div>
                     ) : (
@@ -165,13 +170,6 @@ const PredictTab: React.FC<PredictTabProps> = ({
                             <span className={styles.reportId}>#{result.id.slice(-6)}</span>
                         </div>
 
-                        {foreignObjectDetection.detected && (
-                            <div className={styles.warningBanner}>
-                                <strong>{'\u5f02\u7269\u68c0\u6d4b\u63d0\u793a'}</strong>
-                                <span>{`${foreignObjectDetection.message} (${foreignObjectDetection.count} \u5904\u9ad8\u7f6e\u4fe1\u5ea6\u5f02\u7269)`}</span>
-                            </div>
-                        )}
-
                         <div className={styles.metricsGrid}>
                             <div className={`${styles.metricCard} ${styles.primaryMetric}`}>
                                 <span>评估骨龄为</span>
@@ -215,19 +213,76 @@ const PredictTab: React.FC<PredictTabProps> = ({
                             )}
                         </div>
 
+                        {/* 修正后的评估对照分析模块（全部添加 styles. 前缀） */}
                         {result.real_age_years && (
                             <div className={styles.sectionBlock}>
                                 <h4>评估对照分析</h4>
-                                <div style={{ height: 180, width: '100%', marginTop: '1rem' }}>
-                                    <ResponsiveContainer>
-                                        <BarChart data={generateComparisonData(result)} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                            <XAxis type="number" domain={[0, Math.max(result.predicted_age_years, result.real_age_years || 0) + 2]} />
-                                            <YAxis dataKey="name" type="category" width={80} />
-                                            <Tooltip cursor={{ fill: 'transparent' }} />
-                                            <Bar dataKey="age" barSize={20} radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666' }} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                <div className={styles.ageProgressContainer}>
+                                    {/* 分段色带 */}
+                                    <div className={styles.ageProgressBar}>
+                                        <div className={styles.progressSegmentAbnormalLeft}></div>
+                                        <div className={styles.progressSegmentDelayed}></div>
+                                        <div className={styles.progressSegmentNormal}></div>
+                                        <div className={styles.progressSegmentAdvanced}></div>
+                                        <div className={styles.progressSegmentAbnormalRight}></div>
+                                    </div>
+                                    
+                                    {/* 刻度标签 */}
+                                    <div className={styles.progressTicks}>
+                                        <span>-2岁</span>
+                                        <span>-1岁</span>
+                                        <span>0岁</span>
+                                        <span>1岁</span>
+                                        <span>2岁</span>
+                                    </div>
+                                    
+                                    {/* 年龄差标记点 */}
+                                    {(() => {
+                                        const ageDiff = result.predicted_age_years - result.real_age_years;
+                                        // 计算标记位置（映射-3~+3岁到0~100%）
+                                        const pos = Math.max(0, Math.min(100, ((ageDiff + 3) / 6) * 100));
+                                        return (
+                                            <div 
+                                                className={styles.ageDiffMarker}
+                                                style={{ left: `${pos}%` }}
+                                                title={`骨龄差: ${ageDiff.toFixed(1)}岁`}
+                                            >
+                                                {getAgeDiffEmoji(ageDiff)}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* 结论文字 */}
+                                <div className={styles.progressConclusion}>
+                                    <span className={styles.conclusionLabel}>结论：</span>
+                                    <span className={styles.conclusionValue}>
+                                        骨龄年龄差：{(result.predicted_age_years - result.real_age_years).toFixed(1)} 岁
+                                    </span>
+                                </div>
+
+                                {/* 图例 */}
+                                <div className={styles.progressLegend}>
+                                    <div className={styles.legendItem}>
+                                        <span className={styles.legendDotAbnormal}></span>
+                                        <span>异常</span>
+                                    </div>
+                                    <div className={styles.legendItem}>
+                                        <span className={styles.legendDotDelayed}></span>
+                                        <span>发育迟缓</span>
+                                    </div>
+                                    <div className={styles.legendItem}>
+                                        <span className={styles.legendDotNormal}></span>
+                                        <span>发育正常</span>
+                                    </div>
+                                    <div className={styles.legendItem}>
+                                        <span className={styles.legendDotAdvanced}></span>
+                                        <span>提早发育</span>
+                                    </div>
+                                    <div className={styles.legendItem}>
+                                        <span className={styles.legendDotAbnormal}></span>
+                                        <span>异常</span>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -236,12 +291,12 @@ const PredictTab: React.FC<PredictTabProps> = ({
                             <div className={styles.sectionBlock}>
                                 <h4>AI 特征焦点分析度与异常（GradCAM）</h4>
                                 <div className={styles.heatmapWrapper}>
-                                    <img src={result.heatmap_base64} alt="GradCAM" className={styles.heatmapImg} />
+                                    <img src={result.heatmap_base64} alt="GradCAM" className={styles.heatmapImg}/>
                                     {result.anomalies?.map((item, idx) => (
-                                        item.score >= ANOMALY_ALERT_THRESHOLD && (
+                                        item.score > 0.45 && (
                                             <div key={idx} style={getBoxStyle(item.coord)}>
                                                 <span className={styles.anomalyTag}>
-                                                    {getAnomalyDisplayName(item.type)} {Math.round(item.score * 100)}%
+                                                    {item.type} {Math.round(item.score * 100)}%
                                                 </span>
                                             </div>
                                         )
@@ -249,85 +304,6 @@ const PredictTab: React.FC<PredictTabProps> = ({
                                 </div>
                             </div>
                         )}
-
-                        {/* {(generateJointGradeChartData(result).length > 0 || getPendingJoints(result).length > 0 ) && ( 
-                            <div className={styles.sectionBlock}> 
-                                <h4>小关节分级柱形图</h4> 
-                                {generateJointGradeChartData(result).length > 0 ? ( 
-                                    <div style={{ height: Math.max( 260 , generateJointGradeChartData(result).length * 34 ), width: '100%', marginTop: '0.8rem' }}> 
-                                        <ResponsiveContainer> 
-                                            <BarChart 
-                                                data={generateJointGradeChartData(result)} 
-                                                layout="vertical" 
-                                                margin={{ top: 5 , right: 26 , left: 20 , bottom: 5 }} 
-                                            > 
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={ false } /> 
-                                                <XAxis type="number" domain={[ 0 , 14 ]} /> 
-                                                <YAxis dataKey="joint" type="category" width={ 86 } /> 
-                                                <Tooltip 
-                                                    cursor={{ fill: 'transparent' }} 
-                                                    formatter={(value: any , name: any , entry: any ) => { 
-                                                        if (name === 'grade') { 
-                                                            return [`${value}`, `分级（置信度 ${entry?.payload?.confidence ?? 0 }%）`]; 
-                                                        } 
-                                                        return [value, name]; 
-                                                    }} 
-                                                /> 
-                                                <Bar dataKey="grade" barSize={ 18 } radius={[ 0 ,4 , 4 , 0 ]}>
-                                                    {generateJointGradeChartData(result).map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                                    ))}
-                                                </Bar> 
-                                            </BarChart> 
-                                        </ResponsiveContainer> 
-                                    </div> 
-                                ) : ( 
-                                    <div style={{ marginTop: '0.8rem', color: '#64748b', fontSize: '0.9rem' }}>暂无可分级关节，当前均为待定。</div> 
-                                )} 
-                                {getPendingJoints(result).length > 0 && ( 
-                                    <div style={{ marginTop: '0.6rem', color: '#64748b', fontSize: '0.86rem' }}> 
-                                        待定关节：{getPendingJoints(result).join('、')} 
-                                    </div> 
-                                )} 
-                            </div> 
-                        )} 
-
-                        {(getRecognizedJointRows(result).length > 0 || getPendingJoints(result).length > 0 ) && ( 
-                            <div className={styles.sectionBlock}> 
-                                <h4>小关节分级明细表</h4> 
-                                {getRecognizedJointRows(result).length > 0 ? ( 
-                                    <div style={{ marginTop: '0.8rem', overflowX: 'auto' }}> 
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}> 
-                                            <thead> 
-                                                <tr style={{ background: '#f8fafc' }}> 
-                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>关节</th> 
-                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>分级</th> 
-                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>置信度</th> 
-                                                    <th style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }}>状态</th> 
-                                                </tr> 
-                                            </thead> 
-                                            <tbody> 
-                                                {getRecognizedJointRows(result).map((row) => ( 
-                                                    <tr key={row.joint}> 
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem' }}>{row.joint}</td> 
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontWeight: 700 , fontSize: '0.86rem' }}>{row.grade}</td> 
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem' }}>{row.confidence}%</td> 
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontSize: '0.86rem', color: '#16a34a' }}>{row.status}</td> 
-                                                    </tr> 
-                                                ))} 
-                                            </tbody> 
-                                        </table> 
-                                    </div> 
-                                ) : ( 
-                                    <div style={{ marginTop: '0.8rem', color: '#64748b', fontSize: '0.9rem' }}>暂无已识别的小关节分级结果。</div> 
-                                )} 
-                                {getPendingJoints(result).length > 0 && ( 
-                                    <div style={{ marginTop: '0.65rem', color: '#b45309', fontSize: '0.86rem' }}> 
-                                        待定（未正常识别）：{getPendingJoints(result).join('、')} 
-                                    </div> 
-                                )} 
-                            </div> 
-                        )}  */}
 
                         <div className={styles.textReport}>
                             <pre>{generateMedicalReport(result)}</pre>

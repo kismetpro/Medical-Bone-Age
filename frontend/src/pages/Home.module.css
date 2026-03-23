@@ -67,6 +67,20 @@
   align-items: center;
 }
 
+.navLink {
+  text-decoration: none;
+  color: #38517f;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.navLink:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
 .loginBtn {
   text-decoration: none;
   color: #38517f;
