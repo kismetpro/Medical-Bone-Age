@@ -1,0 +1,163 @@
+.cookiePopup {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 450px;
+  background: #333;
+  color: #fff;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  border-radius: 8px;
+  animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.cookieIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 20px;
+  color: #fff;
+}
+
+.cookieIcon svg {
+  width: 80px;
+  height: 80px;
+}
+
+.cookieText {
+  margin: 20px 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #fff;
+}
+
+.buttonContainer {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0;
+  justify-content: center;
+}
+
+.cookieButton {
+  background: #fff;
+  color: #333;
+  border: none;
+  width: 50%;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-weight: bold;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.cookieButton:hover {
+  background-color: rgba(196, 218, 214, 0.76);
+  transform: translateY(-2px);
+}
+
+.customizeButton {
+  padding: 15px 30px;
+  font-weight: bold;
+  color: #fff;
+  background: transparent;
+  border: 2px solid #fff;
+  cursor: pointer;
+  font-size: 15px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.customizeButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.detailsPanel {
+  margin-top: 20px;
+  text-align: left;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.detailSection {
+  margin-bottom: 15px;
+}
+
+.detailSection:last-child {
+  margin-bottom: 0;
+}
+
+.detailSection strong {
+  display: block;
+  color: #fff;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.detailSection p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .cookiePopup {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    padding: 30px 20px;
+  }
+
+  .cookieIcon svg {
+    width: 60px;
+    height: 60px;
+  }
+
+  .cookieText {
+    font-size: 14px;
+  }
+
+  .buttonContainer {
+    flex-direction: column;
+  }
+
+  .cookieButton {
+    width: 100%;
+  }
+
+  .customizeButton {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}

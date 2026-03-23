@@ -1,0 +1,26 @@
+
+
+# 深度学习模型文件 (巨大的权重文件)
+# 排除具体的模型根目录 与权重文件
+backend/app/models/
+backend/app/detector_of_bone/weight
+
+# 前端 Node 模块和构建产物
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.npm-cache/
+frontend/*.tsbuildinfo
+
+# 环境配置文件 (敏感信息)
+
+
+# 日志文件 & 临时文件
+__pycache__/
+*.pyc
+
+# 编辑器和系统文件
+
+
+# 其他
+

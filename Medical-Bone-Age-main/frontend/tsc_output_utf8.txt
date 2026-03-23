@@ -1,0 +1,11 @@
+﻿src/App.tsx(1,41): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/App.tsx(10,65): error TS2503: Cannot find namespace 'JSX'.
+src/context/AuthContext.tsx(1,58): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/main.tsx(3,31): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/pages/Auth.tsx(2,29): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/pages/Auth.tsx(4,24): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+src/pages/DoctorDashboard.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/pages/DoctorDashboard.tsx(3,29): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/pages/Home.tsx(1,22): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/pages/Home.tsx(2,24): error TS2307: Cannot find module 'framer-motion' or its corresponding type declarations.
+src/pages/UserDashboard.tsx(10,29): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
