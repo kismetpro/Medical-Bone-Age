@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { X, Settings } from 'lucide-react';
 import { ConsentCookie } from '../lib/cookieManager';
 import styles from './CookieBanner.module.css';
 

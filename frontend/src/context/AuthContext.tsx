@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { AuthCookie, ConsentCookie } from '../lib/cookieManager';
+import { AuthCookie } from '../lib/cookieManager';
 
 export type AuthRole = 'user' | 'doctor' | 'super_admin';
 type Role = AuthRole | null;

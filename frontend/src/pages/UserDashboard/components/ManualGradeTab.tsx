@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calculator, Info, CheckCircle, AlertCircle } from 'lucide-react';
+import { Calculator } from 'lucide-react';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell } from 'recharts';
 import styles from '../UserDashboard.module.css';
 import { API_BASE } from '../../../config';
@@ -272,7 +272,7 @@ const ManualGradeTab: React.FC<ManualGradeTabProps> = ({ setResult }) => {
                                             <YAxis dataKey="joint" type="category" width={86} />
                                             <Tooltip
                                                 cursor={{ fill: 'transparent' }}
-                                                formatter={(value: any, name: any, entry: any) => {
+                                                formatter={(value: any, name: any) => {
                                                     if (name === 'grade') {
                                                         return [`${value}级`, '分级'];
                                                     }

@@ -10,6 +10,7 @@ import {
     resolveForeignObjectDetection,
     submitPredictionRequest
 } from '../../lib/prediction';
+import { dataUrlToFile } from '../../lib/imagePreprocessing';
 import { buildAuthHeaders, readErrorMessage } from '../../lib/api';
 import { API_BASE } from '../../config';
 import styles from './UserDashboard.module.css';
@@ -47,6 +48,7 @@ export default function UserDashboard() {
     const [result, setResult] = useState<PredictionResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [imgSettings, setImgSettings] = useState<ImageSettings>(DEFAULT_SETTINGS);
+    const [predictionImageSource, setPredictionImageSource] = useState<'upload' | 'preprocessing' | 'history' | null>(null);
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
@@ -113,6 +115,14 @@ export default function UserDashboard() {
         fetchBoneAgeTrend();
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (preview?.startsWith('blob:')) {
+                URL.revokeObjectURL(preview);
+            }
+        };
+    }, [preview]);
+
     const handleLogout = () => {
         logout();
         navigate('/');
@@ -173,6 +183,7 @@ export default function UserDashboard() {
         setResult(null);
         setError(null);
         setImgSettings(DEFAULT_SETTINGS);
+        setPredictionImageSource('upload');
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,6 +237,7 @@ export default function UserDashboard() {
                 if (fullItem.real_age_years) setRealAge(fullItem.real_age_years.toString());
                 setPreview(null);
                 setFile(null);
+                setPredictionImageSource('history');
                 setShowHistory(false);
             } else {
                 setError('无法加载详细记录');
@@ -250,7 +262,7 @@ export default function UserDashboard() {
                 headers: buildAuthHeaders(true),
                 body: JSON.stringify({ predicted_age_years: parsedAge })
             });
-            const data = await resp.json().catch(() => ({}));
+            await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(await readErrorMessage(resp));
             await fetchPredictionHistory();
             await fetchBoneAgePoints();
@@ -324,6 +336,17 @@ export default function UserDashboard() {
         ];
     };
 
+    const handleUsePreprocessedImage = ({ dataUrl, fileName }: { dataUrl: string; fileName: string }) => {
+        const processedFile = dataUrlToFile(dataUrl, fileName);
+        setFile(processedFile);
+        setPreview(dataUrl);
+        setResult(null);
+        setError(null);
+        setImgSettings(DEFAULT_SETTINGS);
+        setPredictionImageSource('preprocessing');
+        setActiveTab('predict');
+    };
+
     const imageStyle: React.CSSProperties = {
         filter: imgSettings.usePreprocessing 
             ? `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`
@@ -348,6 +371,13 @@ export default function UserDashboard() {
             dateLabel: new Date(p.point_time).toLocaleDateString()
         };
     });
+
+    const preprocessingSeedImage = preview
+        ? {
+            src: preview,
+            fileName: file?.name || result?.filename || 'bone-age-image.png'
+        }
+        : null;
 
 //     return (
 //         <div className={styles.dashboardLayout}>
@@ -460,7 +490,7 @@ return (
         {/* 1. 侧边栏：状态清理门卫 */}
         <UserSidebar 
             activeTab={activeTab} 
-            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula') => {
+            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => {
                 if (tab !== activeTab) {
                     setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
                     setLoading(false); // 强制停止加载动画
@@ -525,6 +555,7 @@ return (
                         }}
                         // 显式传入并保护 result
                         result={result} 
+                        imageSource={predictionImageSource}
                         // 容错处理：确保 coord 必须是 4 位数组，否则不渲染框体
                         getBoxStyle={(coord) => {
                             if (Array.isArray(coord) && coord.length >= 4) {
@@ -593,6 +624,8 @@ return (
                 {activeTab === 'preprocessing' && (
                     <ImagePreprocessingTab 
                         username={username} 
+                        seedImage={preprocessingSeedImage}
+                        onUseInPredict={handleUsePreprocessedImage}
                     />
                 )}
 

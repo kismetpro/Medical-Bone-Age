@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { 
     Upload, Moon, Sun, Contrast, RotateCcw, Calculator, 
-    Box, CheckCircle, AlertCircle, Info, RefreshCw, MousePointer2, Edit3 
+    CheckCircle, AlertCircle, Info, RefreshCw, MousePointer2, Edit3 
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell 
@@ -10,8 +10,6 @@ import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { detectJoints, predictBoneAgeByFormula } from '../../../lib/api';
-import { API_BASE } from '../../../config';
-import { buildAuthHeaders, readErrorMessage } from '../../../lib/api';
 
 interface JointBox {
     id: string;
@@ -86,7 +84,6 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     const [drawingEnd, setDrawingEnd] = useState<{ x: number; y: number } | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const previewRef = useRef<HTMLDivElement>(null);
 
     const imageStyle = useMemo(() => ({
@@ -300,7 +297,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
             });
 
             // 更新关节框的分级结果
-            const gradedJoints = joints.map(joint => {
+            const gradedJoints: JointBox[] = joints.map((joint): JointBox => {
                 // joint_grades 是一个对象，不是数组
                 const graded = data.joint_grades && typeof data.joint_grades === 'object' 
                     ? data.joint_grades[joint.id] 
@@ -309,7 +306,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                     ...joint,
                     grade: graded?.grade_raw,
                     score: graded?.score || 1.0,
-                    status: graded ? 'ok' : 'pending'
+                    status: graded ? 'ok' : 'pending',
                 };
             });
 
@@ -403,7 +400,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                     className={`${styles.uploadArea} ${!file && !preview ? styles.empty : ''}`}
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={handleDrop}
-                    onClick={(e) => {
+                    onClick={() => {
                         // 只有在空状态下才触发文件选择
                         if (!file && !preview) {
                             fileInputRef.current?.click();

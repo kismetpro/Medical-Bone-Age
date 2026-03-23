@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, RefreshCw, Trash2, Check, X as CloseIcon } from 'lucide-react';
+import { X, RefreshCw, Trash2, Check } from 'lucide-react';
 import { ConsentCookie, PreferencesCookie } from '../lib/cookieManager';
 import styles from './CookieSettings.module.css';
 

@@ -315,6 +315,20 @@
   border-color: rgba(255, 255, 255, 0.8);
 }
 
+.sourceBadge {
+  position: absolute;
+  left: 0.65rem;
+  top: 0.65rem;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.88);
+  color: #ecfeff;
+  padding: 0.36rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 18px -14px rgba(15, 118, 110, 0.7);
+}
+
 .placeholder {
   text-align: center;
   color: #6a7893;
