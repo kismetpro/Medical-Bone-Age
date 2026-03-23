@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import UserDashboard from './pages/UserDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
+import Message from './pages/Message';
+import Consultation from './pages/Consultation';
 import AiPet from './components/AiPet';
 import CookieBanner from './components/CookieBanner';
 import './App.css';
@@ -41,6 +43,8 @@ function App() {
     <div className="app-main-layout">
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/message" element={<Message />} />
+        <Route path="/consultation" element={<Consultation />} />
         <Route path="/auth" element={<Auth />} />
         <Route
           path="/user-dashboard"

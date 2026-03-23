@@ -34,6 +34,8 @@ export default function Home() {
                     <span>骨龄 AI 平台</span>
                 </div>
                 <nav className={styles.nav}>
+                    <Link to="/message" className={styles.navLink}>资讯中心</Link>
+                    <Link to="/consultation" className={styles.navLink}>智能问诊</Link>
                     <Link to="/auth" className={styles.loginBtn}>登录</Link>
                     <Link to="/auth" className={styles.registerBtn}>免费注册</Link>
                     <button
