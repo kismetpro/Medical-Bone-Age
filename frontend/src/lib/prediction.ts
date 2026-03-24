@@ -148,8 +148,15 @@ export async function submitPredictionRequest({
 /**
  * 规范化预测结果，确保字段一致性
  */
-export function normalizePredictionResult<T>(data: any, inputRealAge?: string | number): T {
-  const result = { ...data };
+type PredictionResultInput = Record<string, unknown> & {
+  real_age_years?: number | null;
+  timestamp?: number;
+  anomalies?: AnomalyItem[] | null;
+  foreign_object_detection?: ForeignObjectDetection;
+};
+
+export function normalizePredictionResult<T>(data: PredictionResultInput, inputRealAge?: string | number): T {
+  const result: PredictionResultInput = { ...data };
 
   // 如果后端没返回 real_age_years 但输入中有，则进行补充
   if (result.real_age_years === undefined || result.real_age_years === null) {

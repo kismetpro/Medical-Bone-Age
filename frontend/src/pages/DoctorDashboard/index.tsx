@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../../config';
 import { useAuth, type AuthRole } from '../../context/AuthContext';
 import { normalizePredictionResult, submitPredictionRequest } from '../../lib/prediction';
@@ -26,7 +25,6 @@ import DoctorImagePreprocessingTab from './components/DoctorImagePreprocessingTa
 
 export default function DoctorDashboard() {
   const { username, role, logout } = useAuth();
-  const navigate = useNavigate();
   const isSuperAdmin = role === 'super_admin';
   const displayRole = isSuperAdmin ? '超级管理员' : '临床医生';
   const predictionFileInputRef = useRef<HTMLInputElement>(null);
@@ -72,14 +70,6 @@ export default function DoctorDashboard() {
     void fetchPatientUsers();
   }, []);
 
-  useEffect(() => {
-    if (isSuperAdmin && activeTab === 'accounts') {
-      void fetchAccounts();
-    } else if (activeTab === 'accounts') {
-      setActiveTab('records');
-    }
-  }, [activeTab, isSuperAdmin]);
-
   useEffect(() => () => {
     if (predictionPreview) {
       URL.revokeObjectURL(predictionPreview);
@@ -114,7 +104,7 @@ export default function DoctorDashboard() {
     }
   };
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     if (!isSuperAdmin) return;
     setAccountsLoading(true);
     setAccountError(null);
@@ -128,7 +118,15 @@ export default function DoctorDashboard() {
     } finally {
       setAccountsLoading(false);
     }
-  };
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (isSuperAdmin && activeTab === 'accounts') {
+      void fetchAccounts();
+    } else if (activeTab === 'accounts') {
+      setActiveTab('records');
+    }
+  }, [activeTab, fetchAccounts, isSuperAdmin]);
 
   const closePredictionModal = () => {
     setPredictionModalOpen(false);
@@ -288,7 +286,6 @@ export default function DoctorDashboard() {
         username={username}
         displayRole={displayRole}
         logout={logout}
-        navigate={navigate}
       />
 
       <main className={styles.mainContent}>
@@ -343,9 +340,7 @@ export default function DoctorDashboard() {
         )}
 
         {activeTab === 'preprocessing' && (
-          <DoctorImagePreprocessingTab 
-            username={username}
-          />
+          <DoctorImagePreprocessingTab />
         )}
       </main>
 

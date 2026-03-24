@@ -11,11 +11,10 @@ interface DoctorSidebarProps {
     username: string | null;
     displayRole: string;
     logout: () => void;
-    navigate: (path: string) => void;
 }
 
 const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
-    isSuperAdmin, activeTab, setActiveTab, username, displayRole, logout, navigate: _navigate
+    isSuperAdmin, activeTab, setActiveTab, username, displayRole, logout
 }) => {
     const navigate = useNavigate();
     const location = useLocation();

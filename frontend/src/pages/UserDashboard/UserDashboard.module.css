@@ -147,6 +147,9 @@
   border: 1px solid #dce5f5;
   background: #fff;
   cursor: pointer;
+  width: 100%;
+  text-align: left;
+  appearance: none;
 }
 
 .historyMeta {
@@ -185,6 +188,21 @@
 .emptyText {
   color: #6a7893;
   margin: 0;
+}
+
+.subVersion {
+  margin-left: 0.35rem;
+  color: #6a7893;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.viewPort {
+  margin-top: 1rem;
+}
+
+.jointContainer {
+  margin-top: 1rem;
 }
 
 .workspaceGrid {
@@ -425,6 +443,137 @@
   color: #1d4ed8;
 }
 
+.historyNotice {
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  padding: 0.82rem 0.95rem;
+  font-weight: 700;
+}
+
+.historyNoticeSuccess {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.historyNoticeError {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.historyFormCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.historyFormGrid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(0, 1.6fr) auto;
+}
+
+.historyInput {
+  width: 100%;
+  border: 1px solid #d2ddee;
+  border-radius: 10px;
+  padding: 0.62rem 0.72rem;
+  box-sizing: border-box;
+}
+
+.historyInput:focus {
+  outline: none;
+  border-color: #6790eb;
+  box-shadow: 0 0 0 3px rgba(103, 144, 235, 0.14);
+}
+
+.historyChartShell {
+  height: 280px;
+  margin-top: 1rem;
+}
+
+.historyLatex {
+  margin-top: 0.75rem;
+  color: #475569;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.historyCardsGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: 0.9rem;
+}
+
+.historyPointCard,
+.historyRecordCard {
+  border: 1px solid #dce5f5;
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: #f8fbff;
+  color: #516079;
+}
+
+.historyCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.45rem;
+}
+
+.historyDeleteBtn {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.historyRecordScore {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #14213d;
+  margin-top: 0.5rem;
+}
+
+.historyRecordScore span {
+  font-size: 1rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.historyRecordActions {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+.historySecondaryAction {
+  border: 1px solid #bdd0ff;
+  background: #fff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.historyEmptyState {
+  border: 1px dashed #cad7f0;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 1rem;
+  color: #6a7893;
+  text-align: center;
+}
+
 .errorBanner {
   margin-top: 0.75rem;
   border: 1px solid #f7bfcc;
@@ -653,6 +802,11 @@
   }
 
   .metricsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .historyFormGrid,
+  .historyRecordActions {
     grid-template-columns: 1fr;
   }
 }
