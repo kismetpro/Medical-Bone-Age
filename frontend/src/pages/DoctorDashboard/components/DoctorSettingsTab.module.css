@@ -11,18 +11,18 @@
 }
 
 .settingsSidebar {
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(30, 41, 59, 0.98));
+    background: rgba(255, 255, 255, 0.82);
     border-radius: 16px;
     padding: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(20, 33, 61, 0.1);
+    box-shadow: 0 16px 34px -28px rgba(20, 33, 61, 0.42);
 }
 
 .settingsSidebar h3 {
     margin: 0 0 1.5rem;
     font-size: 1.25rem;
     font-weight: 700;
-    color: #f1f5f9;
+    color: #1e293b;
 }
 
 .settingsSidebar nav {
@@ -36,26 +36,28 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.85rem 1rem;
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
     border-radius: 10px;
     cursor: pointer;
     font-size: 0.95rem;
     font-weight: 600;
-    color: #cbd5e1;
+    color: #516079;
     transition: all 0.2s ease;
     text-align: left;
 }
 
 .settingsSidebar button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f1f5f9;
+    background: #edf2ff;
+    color: #1d4ed8;
+    border-color: #dbeafe;
 }
 
 .settingsSidebar button.active {
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    background: #e9f0ff;
+    color: #1744ab;
+    border-color: #bdd0ff;
+    box-shadow: 0 8px 16px -14px rgba(20, 33, 61, 0.45);
 }
 
 .settingsContent {
@@ -299,8 +301,9 @@
     align-items: center;
     gap: 0.75rem;
     padding: 1rem 1.25rem;
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-    color: #fff;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1d4ed8;
+    border-bottom: 1px solid #bfdbfe;
     font-weight: 700;
 }
 

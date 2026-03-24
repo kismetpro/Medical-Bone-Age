@@ -1,20 +1,86 @@
 /* 全局容器样式 */
 .container {
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding-top: 58px;
+  padding: 24px 16px 40px;
   font-family: "Microsoft Yahei", sans-serif;
+}
+
+.pageShell {
+  border-radius: 28px;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 36px -24px rgba(20, 33, 61, 0.36);
+  padding: 20px;
 }
 
 /* 顶部绿色条带 */
 .topGreenBar {
-  width: 100%;
-  height: 8px;
-  background-color: #4CAF50;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 999;
+  width: 96px;
+  height: 6px;
+  background: linear-gradient(90deg, #0f9d7a, #1d4ed8);
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.pageToolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 24px;
+}
+
+.homeBackBtn {
+  border: 1px solid rgba(56, 81, 127, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: #38517f;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 10px 20px -18px rgba(20, 33, 61, 0.4);
+}
+
+.homeBackBtn:hover {
+  background: #eef4ff;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.pageIntro {
+  flex: 1;
+  max-width: 760px;
+}
+
+.pageEyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pageIntro h1 {
+  margin: 0.9rem 0 0.5rem;
+  color: #14213d;
+  font-size: clamp(1.75rem, 3vw, 2.3rem);
+}
+
+.pageIntro p {
+  margin: 0;
+  color: #516079;
+  line-height: 1.7;
 }
 
 /* 轮播容器 */
@@ -22,7 +88,9 @@
   position: relative;
   height: 350px;
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
+  border-radius: 24px;
+  box-shadow: 0 18px 34px -26px rgba(20, 33, 61, 0.52);
 }
 
 .carouselInner {
@@ -37,6 +105,8 @@
   cursor: pointer;
 }
 
+.active {}
+
 .carouselItem img {
   width: 100%;
   height: 100%;
@@ -48,9 +118,11 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0,0,0,0.5);
+  background: linear-gradient(180deg, rgba(20, 33, 61, 0) 0%, rgba(20, 33, 61, 0.76) 100%);
   color: white;
-  padding: 15px;
+  padding: 18px;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 /* 轮播右侧卡片 */
@@ -69,13 +141,20 @@
 .card {
   padding: 20px;
   color: white;
-  border-radius: 4px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   font-size: 14px;
   cursor: pointer;
+  box-shadow: 0 14px 24px -18px rgba(20, 33, 61, 0.55);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 28px -18px rgba(20, 33, 61, 0.6);
 }
 
 /* 轮播控制按钮 */
@@ -86,21 +165,25 @@
   width: 100%;
   display: flex;
   justify-content: space-between;
+  padding: 0 12px;
 }
 
 .carouselControls button {
-  background: rgba(0,0,0,0.5);
+  background: rgba(255, 255, 255, 0.2);
   color: white;
-  border: none;
-  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  width: 48px;
+  height: 48px;
   cursor: pointer;
   font-size: 20px;
+  backdrop-filter: blur(8px);
 }
 
 /* 轮播指示器 */
 .carouselIndicators {
   position: absolute;
-  bottom: 10px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -111,7 +194,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
 }
 
@@ -128,20 +211,31 @@
 /* 中间文章列表 */
 .content {
   flex: 1;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 22px;
+  padding: 0 20px;
+  box-shadow: 0 16px 30px -24px rgba(20, 33, 61, 0.34);
 }
 
 .article {
   display: flex;
   gap: 15px;
-  padding: 15px 0;
-  border-bottom: 1px solid #eee;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(20, 33, 61, 0.08);
   cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.article:hover {
+  transform: translateX(4px);
 }
 
 .article img {
   width: 150px;
   height: 100px;
   object-fit: cover;
+  border-radius: 16px;
 }
 
 .articleInfo {
@@ -169,18 +263,24 @@
 /* 右侧专题栏 */
 .sidebarRight {
   width: 280px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 16px 30px -24px rgba(20, 33, 61, 0.34);
 }
 
 .sidebarBanner {
   width: 100%;
   margin-bottom: 10px;
+  border-radius: 18px;
 }
 
 .sidebarRight h3 {
   font-size: 18px;
   margin-bottom: 15px;
   padding-bottom: 5px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(20, 33, 61, 0.08);
 }
 
 .more {
@@ -192,7 +292,7 @@
 
 .topicItem {
   padding: 10px 0;
-  border-bottom: 1px dotted #eee;
+  border-bottom: 1px dotted rgba(20, 33, 61, 0.12);
 }
 
 .topicItem img {
@@ -200,6 +300,7 @@
   height: 30px;
   object-fit: cover;
   margin-bottom: 5px;
+  border-radius: 10px;
 }
 
 .topicItem p {
@@ -209,21 +310,22 @@
 
 /* 文章详情页样式 */
 .articleDetail {
-  padding: 20px;
-  background: #fff;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  margin-top: 20px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 16px 30px -24px rgba(20, 33, 61, 0.34);
 }
 
 .backBtn {
-  padding: 8px 16px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  padding: 10px 18px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  border: 1px solid #cad7f0;
+  border-radius: 999px;
   cursor: pointer;
-  margin-bottom: 15px;
+  margin-bottom: 18px;
+  font-weight: 700;
 }
 
 .detailTitle {
@@ -240,4 +342,61 @@
 .detailContent {
   line-height: 1.8;
   color: #333;
+}
+
+@media (max-width: 960px) {
+  .pageToolbar {
+    flex-direction: column;
+  }
+
+  .mainContainer {
+    flex-direction: column;
+  }
+
+  .sidebarRight {
+    width: 100%;
+  }
+
+  .carousel {
+    height: auto;
+  }
+
+  .carouselInner {
+    height: 350px;
+  }
+
+  .carouselRight {
+    position: static;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.7);
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 16px 12px 28px;
+  }
+
+  .pageShell {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .content {
+    padding: 0 14px;
+  }
+
+  .article {
+    flex-direction: column;
+  }
+
+  .article img {
+    width: 100%;
+    height: 180px;
+  }
+
+  .carouselControls button {
+    width: 40px;
+    height: 40px;
+  }
 }
