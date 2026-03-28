@@ -1469,3 +1469,114 @@
     justify-content: center;
   }
 }
+
+/* ========== 新增：年龄进度条样式 - 评估对照分析模块 ========== */
+.ageProgressContainer {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  margin: 1rem 0;
+}
+
+.ageProgressBar {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* 分段颜色定义 */
+.progressSegmentAbnormalLeft {
+  flex: 1;
+  background-color: #64748b; /* 深蓝-异常 */
+}
+.progressSegmentDelayed {
+  flex: 1;
+  background-color: #38bdf8; /* 浅蓝-发育迟缓 */
+}
+.progressSegmentNormal {
+  flex: 2;
+  background-color: #84cc16; /* 绿色-发育正常 */
+}
+.progressSegmentAdvanced {
+  flex: 1;
+  background-color: #eab308; /* 黄色-提早发育 */
+}
+.progressSegmentAbnormalRight {
+  flex: 1;
+  background-color: #ef4444; /* 红色-异常 */
+}
+
+/* 刻度标签 */
+.progressTicks {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 1%;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+/* 年龄差标记点 */
+.ageDiffMarker {
+  position: absolute;
+  top: -8px;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: #ef4444;
+  cursor: help;
+}
+
+/* 结论文字 */
+.progressConclusion {
+  margin-top: 1rem;
+  font-size: 1.25rem;
+}
+.conclusionLabel {
+  color: #3b82f6;
+  font-weight: 500;
+}
+.conclusionValue {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* 图例 */
+.progressLegend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #475569;
+}
+.legendDotAbnormal {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #64748b;
+}
+.legendDotDelayed {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #38bdf8;
+}
+.legendDotNormal {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #84cc16;
+}
+.legendDotAdvanced {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #eab308;
+}

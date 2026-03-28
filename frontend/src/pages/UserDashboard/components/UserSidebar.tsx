@@ -4,8 +4,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade';
-    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => void;
+    activeTab?: 'message' | 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade';
+    setActiveTab?: (tab: 'message' | 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => void;
     username: string | null;
     handleLogout: () => void;
 }
@@ -24,6 +24,7 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
             </div>
 
             <nav className={styles.sideNav}>
+
                 <button 
                     className={`${styles.navItem} ${isDashboard && activeTab === 'predict' ? styles.active : ''}`} 
                     onClick={() => {
