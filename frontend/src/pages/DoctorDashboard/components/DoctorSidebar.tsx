@@ -96,7 +96,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
             </nav>
             <div className={styles.userProfile}>
                 <div className={styles.userInfo}>
-                    <UserIcon size={20} color="#cbd5e1" />
+                    <UserIcon size={20} color="#64748b" />
                     <div style={{ overflow: 'hidden' }}>
                         <span className={styles.username} style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>{username}</span>
                         <span className={styles.roleBadge}>{displayRole}</span>

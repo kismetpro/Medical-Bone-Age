@@ -735,19 +735,12 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                                     {formulaResult.boneAge.toFixed(2)} 岁
                                 </span>
                             </div>
-                            <div className={styles.formulaItem}>
-                                <label>置信度：</label>
-                                <span className={styles.formulaValue} style={{ color: formulaResult.confidence > 80 ? '#22c55e' : '#eab308' }}>
-                                    {formulaResult.confidence.toFixed(1)}%
-                                </span>
-                            </div>
                         </div>
                         <div className={styles.formulaDescription}>
                             <Info size={16} style={{ marginRight: '0.5rem', color: '#3b82f6' }} />
                             <span>
                                 {formulaResult.description}
                                 S表示总成熟度评分，基于13个关键小关节的分级结果计算。
-                                置信度基于关节检测质量评估。
                             </span>
                         </div>
                     </div>

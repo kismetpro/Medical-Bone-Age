@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Sparkles, Send, MessageSquare, Flame, Lightbulb, Stethoscope, Image as ImageIcon, X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Bot, Sparkles, Send, MessageSquare, Flame, Lightbulb, Stethoscope, Image as ImageIcon, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { buildAuthHeaders } from '../lib/api';
 import { API_BASE } from '../config';
@@ -7,6 +8,8 @@ import styles from './Consultation.module.css';
 
 const ConsultationPage: React.FC = () => {
     const { role } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string; image?: string }>>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -16,6 +19,7 @@ const ConsultationPage: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isDoctor = role === 'doctor' || role === 'super_admin';
+    const isStandaloneRoute = location.pathname === '/consultation';
 
     const userSuggestions = [
         { icon: <MessageSquare size={16} />, text: "什么是骨龄？它和普通年龄有什么区别？" },
@@ -66,6 +70,14 @@ const ConsultationPage: React.FC = () => {
     const clearSelectedImage = () => {
         setSelectedImage(null);
         setSelectedImagePreview(null);
+    };
+
+    const handleBack = () => {
+        if (window.history.length > 1) {
+            navigate(-1);
+            return;
+        }
+        navigate('/');
     };
 
     const handleSend = async (text?: string) => {
@@ -189,8 +201,21 @@ const ConsultationPage: React.FC = () => {
     };
 
     return (
-        <div className={styles.pageContainer} style={{ padding: 0, maxWidth: 'none', margin: 0 }}>
-            <div className={styles.consultationCard} style={{ height: 'calc(100vh - 120px)', borderRadius: 0, border: 'none' }}>
+        <div className={`${styles.pageContainer} ${isStandaloneRoute ? styles.standalonePage : styles.embeddedPage}`}>
+            {isStandaloneRoute && (
+                <div className={styles.pageToolbar}>
+                    <button className={styles.backButton} onClick={handleBack}>
+                        <ArrowLeft size={18} />
+                        返回首页
+                    </button>
+                    <div className={styles.pageHeading}>
+                        <span className={styles.pageEyebrow}>AI Consultation</span>
+                        <h1>智能健康问诊</h1>
+                        <p>面向家长与临床医生的统一智能问答入口，延续首页的圆角卡片与柔和玻璃质感。</p>
+                    </div>
+                </div>
+            )}
+            <div className={`${styles.consultationCard} ${isStandaloneRoute ? styles.standaloneCard : styles.embeddedCard}`}>
                 <header className={styles.header}>
                     <div className={styles.graphicBox}>
                         <Bot size={32} />

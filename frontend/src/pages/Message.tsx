@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import styles from './Message.module.css'; // 建议创建对应的 CSS 模块文件
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import styles from './Message.module.css';
 
 // 定义文章数据类型
 interface Article {
@@ -35,6 +37,7 @@ interface TopicItem {
 }
 
 const MessagePage: React.FC = () => {
+  const navigate = useNavigate();
   // 轮播相关状态
   const [currentSlide, setCurrentSlide] = useState<number>(0);
   // 页面显示状态：list - 列表页，detail - 详情页
@@ -249,120 +252,135 @@ const MessagePage: React.FC = () => {
     setPageState('list');
   };
 
+  const backToHome = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
+
   return (
     <div className={styles.container}>
-      {/* 顶部绿色条带 */}
-      <div className={styles.topGreenBar}></div>
-
-      {/* 轮播+右侧卡片 - 仅列表页显示 */}
-      {pageState === 'list' && (
-        <div className={styles.carousel}>
-          <div ref={carouselInnerRef} className={styles.carouselInner}>
-            {carouselItems.map((item, index) => (
-              <div 
-                key={item.id} 
-                className={`${styles.carouselItem} ${index === currentSlide ? styles.active : ''}`}
-                onClick={() => openArticle(item.id)}
-              >
-                <img src={item.imgSrc} alt={item.caption} />
-                <div className={styles.carouselCaption}>{item.caption}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* 右侧快捷卡片区 */}
-          <div className={styles.carouselRight}>
-            {cardItems.map(item => (
-              <div 
-                key={item.id} 
-                className={styles.card}
-                style={{ backgroundColor: item.bgColor }}
-                onClick={() => openArticle(item.id)}
-              >
-                {item.text}
-              </div>
-            ))}
-          </div>
-
-          {/* 轮播控制按钮 */}
-          <div className={styles.carouselControls}>
-            <button onClick={prevSlide}>&lt;</button>
-            <button onClick={nextSlide}>&gt;</button>
-          </div>
-
-          {/* 轮播指示器 */}
-          <div className={styles.carouselIndicators}>
-            {carouselItems.map((_, index) => (
-              <span 
-                key={index}
-                className={`${index === currentSlide ? styles.active : ''}`}
-                onClick={() => goToSlide(index)}
-              ></span>
-            ))}
+      <div className={styles.pageShell}>
+        <div className={styles.topGreenBar}></div>
+        <div className={styles.pageToolbar}>
+          <button className={styles.homeBackBtn} onClick={backToHome}>
+            <ArrowLeft size={18} />
+            返回首页
+          </button>
+          <div className={styles.pageIntro}>
+            <span className={styles.pageEyebrow}>Bone Age AI</span>
+            <h1>骨骼健康资讯中心</h1>
+            <p>聚合骨龄、生长发育与骨科科普内容，保持与平台整体一致的轻盈医疗风格。</p>
           </div>
         </div>
-      )}
 
-      {/* 主内容区 */}
-      {pageState === 'list' ? (
-        // 列表页
-        <div className={styles.mainContainer}>
-          {/* 中间文章列表 */}
-          <div className={styles.content}>
-            {articleList.map(item => (
-              <div 
-                key={item.id} 
-                className={styles.article}
-                onClick={() => openArticle(item.id)}
-              >
-                <img src={item.imgSrc} alt={item.title} />
-                <div className={styles.articleInfo}>
-                  <h4>{item.title}</h4>
-                  <p>{item.desc}</p>
-                  <div className={styles.articleDate}>{item.date}</div>
+        {/* 轮播+右侧卡片 - 仅列表页显示 */}
+        {pageState === 'list' && (
+          <div className={styles.carousel}>
+            <div ref={carouselInnerRef} className={styles.carouselInner}>
+              {carouselItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`${styles.carouselItem} ${index === currentSlide ? styles.active : ''}`}
+                  onClick={() => openArticle(item.id)}
+                >
+                  <img src={item.imgSrc} alt={item.caption} />
+                  <div className={styles.carouselCaption}>{item.caption}</div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          {/* 右侧专题栏 */}
-          <div className={styles.sidebarRight}>
-            <img 
-              src="https://picsum.photos/280/100?random=7" 
-              alt="香山国际关节成形外科峰会" 
-              className={styles.sidebarBanner}
-            />
-            <h3>
-              专题 
-              <a href="#" className={styles.more}>更多</a>
-            </h3>
-            {topicItems.map(item => (
-              <div key={item.id} className={styles.topicItem}>
-                <img src={item.imgSrc} alt={item.text} />
-                <p>{item.text}</p>
-              </div>
-            ))}
+            {/* 右侧快捷卡片区 */}
+            <div className={styles.carouselRight}>
+              {cardItems.map(item => (
+                <div
+                  key={item.id}
+                  className={styles.card}
+                  style={{ backgroundColor: item.bgColor }}
+                  onClick={() => openArticle(item.id)}
+                >
+                  {item.text}
+                </div>
+              ))}
+            </div>
+
+            {/* 轮播控制按钮 */}
+            <div className={styles.carouselControls}>
+              <button onClick={prevSlide} aria-label="上一条资讯">&lt;</button>
+              <button onClick={nextSlide} aria-label="下一条资讯">&gt;</button>
+            </div>
+
+            {/* 轮播指示器 */}
+            <div className={styles.carouselIndicators}>
+              {carouselItems.map((_, index) => (
+                <span
+                  key={index}
+                  className={`${index === currentSlide ? styles.active : ''}`}
+                  onClick={() => goToSlide(index)}
+                ></span>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : (
-        // 详情页
-        <div className={styles.articleDetail}>
-          <button className={styles.backBtn} onClick={backToList}>← 返回列表</button>
-          {selectedArticleId && articles[selectedArticleId] && (
-            <>
-              <h2 className={styles.detailTitle}>{articles[selectedArticleId].title}</h2>
-              <div className={styles.meta}>发布时间：{articles[selectedArticleId].date}</div>
-              <div 
-                className={styles.detailContent}
-                dangerouslySetInnerHTML={{ __html: articles[selectedArticleId].content }}
+        )}
+
+        {/* 主内容区 */}
+        {pageState === 'list' ? (
+          <div className={styles.mainContainer}>
+            <div className={styles.content}>
+              {articleList.map(item => (
+                <div
+                  key={item.id}
+                  className={styles.article}
+                  onClick={() => openArticle(item.id)}
+                >
+                  <img src={item.imgSrc} alt={item.title} />
+                  <div className={styles.articleInfo}>
+                    <h4>{item.title}</h4>
+                    <p>{item.desc}</p>
+                    <div className={styles.articleDate}>{item.date}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.sidebarRight}>
+              <img
+                src="https://picsum.photos/280/100?random=7"
+                alt="香山国际关节成形外科峰会"
+                className={styles.sidebarBanner}
               />
-            </>
-          )}
-        </div>
-      )}
+              <h3>
+                专题
+                <a href="#" className={styles.more}>更多</a>
+              </h3>
+              {topicItems.map(item => (
+                <div key={item.id} className={styles.topicItem}>
+                  <img src={item.imgSrc} alt={item.text} />
+                  <p>{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className={styles.articleDetail}>
+            <button className={styles.backBtn} onClick={backToList}>← 返回资讯列表</button>
+            {selectedArticleId && articles[selectedArticleId] && (
+              <>
+                <h2 className={styles.detailTitle}>{articles[selectedArticleId].title}</h2>
+                <div className={styles.meta}>发布时间：{articles[selectedArticleId].date}</div>
+                <div
+                  className={styles.detailContent}
+                  dangerouslySetInnerHTML={{ __html: articles[selectedArticleId].content }}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-// 默认导出组件
 export default MessagePage;

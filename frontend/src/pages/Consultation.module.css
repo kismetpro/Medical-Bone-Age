@@ -5,6 +5,81 @@
     animation: fadeIn 0.6s ease-out;
 }
 
+.standalonePage {
+    max-width: 1180px;
+    padding: 24px 16px 40px;
+}
+
+.embeddedPage {
+    padding: 0;
+    max-width: none;
+    margin: 0;
+}
+
+.pageToolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.1rem;
+    border-radius: 24px;
+    border: 1px solid rgba(20, 33, 61, 0.12);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 16px 30px -24px rgba(20, 33, 61, 0.34);
+}
+
+.backButton {
+    border: 1px solid rgba(56, 81, 127, 0.16);
+    background: rgba(255, 255, 255, 0.92);
+    color: #38517f;
+    border-radius: 999px;
+    padding: 0.72rem 1rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.backButton:hover {
+    background: #eef4ff;
+    color: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.pageHeading {
+    flex: 1;
+    max-width: 760px;
+}
+
+.pageEyebrow {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.72rem;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #1d4ed8;
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.pageHeading h1 {
+    margin: 0.85rem 0 0.5rem;
+    color: #14213d;
+    font-size: clamp(1.75rem, 3vw, 2.3rem);
+}
+
+.pageHeading p {
+    margin: 0;
+    color: #516079;
+    line-height: 1.7;
+}
+
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
@@ -20,6 +95,18 @@
     flex-direction: column;
     overflow: hidden;
     height: 85vh;
+}
+
+.standaloneCard {
+    min-height: calc(100vh - 220px);
+    border-radius: 28px;
+    border: 1px solid rgba(20, 33, 61, 0.12);
+}
+
+.embeddedCard {
+    height: calc(100vh - 120px);
+    border-radius: 0;
+    border: none;
 }
 
 .header {
@@ -330,6 +417,9 @@
 
 @media (max-width: 768px) {
     .pageContainer { padding: 1rem; }
+    .standalonePage { padding: 16px 12px 28px; }
+    .pageToolbar { flex-direction: column; padding: 1rem; }
+    .standaloneCard { min-height: calc(100vh - 180px); }
     .consultationCard { height: 90vh; }
     .bubble { max-width: 85%; }
     .suggestionGrid { grid-template-columns: 1fr; }

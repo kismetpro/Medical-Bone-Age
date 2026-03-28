@@ -27,6 +27,7 @@ interface PredictTabProps {
     getEvaluation: (boneAge: number, chronoAge: number) => { status: string, color: string, desc: string };
     getBoxStyle: (coord: number[]) => React.CSSProperties;
     generateMedicalReport: (data: PredictionResult | null) => string;
+    generateComparisonData?: (data: PredictionResult) => Array<{ name: string; age: number; fill: string }>;
     imageSource?: 'upload' | 'preprocessing' | 'history' | null;
 }
 

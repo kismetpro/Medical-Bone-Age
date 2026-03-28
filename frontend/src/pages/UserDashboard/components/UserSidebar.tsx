@@ -4,8 +4,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'message' | 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade';
-    setActiveTab?: (tab: 'message' | 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => void;
+    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade';
+    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => void;
     username: string | null;
     handleLogout: () => void;
 }
