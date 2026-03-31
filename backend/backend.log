@@ -63,3 +63,7 @@ INFO:     127.0.0.1:41862 - "POST /predict HTTP/1.1" 503 Service Unavailable
 INFO:     127.0.0.1:41866 - "POST /predict HTTP/1.1" 503 Service Unavailable
 INFO:     127.0.0.1:41882 - "POST /predict HTTP/1.1" 503 Service Unavailable
 INFO:     127.0.0.1:41884 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [124612]

@@ -24,3 +24,5 @@ __pycache__/
 
 # 其他
 
+.backend.pid
+.frontend.pid
