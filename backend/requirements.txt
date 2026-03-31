@@ -9,3 +9,4 @@ ultralytics
 matplotlib
 requests
 python-dotenv
+onnxruntime

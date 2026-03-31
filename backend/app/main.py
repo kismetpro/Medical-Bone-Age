@@ -1186,6 +1186,43 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
         )
 
 
+def _ensure_builtin_accounts(conn: sqlite3.Connection):
+    """Ensure standard built-in accounts exist and have the correct passwords: admin, doctor, user."""
+    builtin = [
+        ("admin", "Admin123456", ROLE_SUPER_ADMIN),
+        ("doctor", "Doctor123456", ROLE_DOCTOR),
+        ("user", "User123456", ROLE_USER),
+    ]
+    now_iso = _to_iso(_utc_now())
+    for username, password, role in builtin:
+        salt_hex = secrets.token_hex(16)
+        pw_hash = hash_password(password, salt_hex, PBKDF2_ITERATIONS)
+        
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not row:
+            conn.execute(
+                """
+                INSERT INTO users (username, role, password_hash, password_salt, iterations, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (username, role, pw_hash, salt_hex, PBKDF2_ITERATIONS, now_iso),
+            )
+            print(f"Created built-in account '{username}' with role '{role}'")
+        else:
+            # Force update role and password to match requested built-in credentials
+            conn.execute(
+                """
+                UPDATE users 
+                SET role = ?, password_hash = ?, password_salt = ?, iterations = ?
+                WHERE username = ?
+                """,
+                (role, pw_hash, salt_hex, PBKDF2_ITERATIONS, username),
+            )
+            # Invalidate existing sessions for security
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+            print(f"Refreshed built-in account '{username}' (role '{role}')")
+
+
 def init_auth_db():
     with get_auth_conn() as conn:
         _create_users_table(conn)
@@ -1222,6 +1259,7 @@ def init_auth_db():
         )
         if _auth_role_migration_needed(conn):
             _migrate_auth_role_schema(conn)
+        _ensure_builtin_accounts(conn)
         _ensure_default_super_admin(conn)
         conn.commit()
 

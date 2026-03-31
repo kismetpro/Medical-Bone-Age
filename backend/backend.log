@@ -1,0 +1,30 @@
+正在启动后端服务...
+INFO:     Started server process [108555]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Refreshed built-in account 'admin' (role 'super_admin')
+Refreshed built-in account 'doctor' (role 'doctor')
+Refreshed built-in account 'user' (role 'user')
+Loading models on cpu...
+WARNING: Fracture model not found: app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx
+WARNING: No fold model file found under app/models
+ERROR: No age model loaded!
+WARNING: joint model not found: app/models/joints/best_DIP.pth
+WARNING: joint model not found: app/models/joints/best_DIPFirst.pth
+WARNING: joint model not found: app/models/joints/best_PIP.pth
+WARNING: joint model not found: app/models/joints/best_PIPFirst.pth
+WARNING: joint model not found: app/models/joints/best_MCP.pth
+WARNING: joint model not found: app/models/joints/best_MCPFirst.pth
+WARNING: joint model not found: app/models/joints/best_MIP.pth
+WARNING: joint model not found: app/models/joints/best_Radius.pth
+WARNING: joint model not found: app/models/joints/best_Ulna.pth
+Joint models loaded: 0
+WARNING: Joint recognize model not found: app/models/recognize/best.pt
+INFO:     127.0.0.1:58400 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44258 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59088 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59100 - "GET /doctor/patient-users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59096 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59106 - "GET /doctor/patient-users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59114 - "GET /predictions HTTP/1.1" 200 OK
