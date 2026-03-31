@@ -3004,6 +3004,9 @@ async def joint_grading_predict(
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
+            # 确保分数为有效数字
+            if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
+                joint_rus_total_score = 0
             joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
 
         return {
@@ -3096,8 +3099,8 @@ async def formula_calculation(
             "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
             "formula_expression": get_formula_expression(gender_lower),
             "total_score": total_score,
-            "bone_age": round(bone_age, 2),
-            "confidence": round(confidence, 1),
+            "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
+            "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_details": rus_details,
@@ -3162,8 +3165,8 @@ async def manual_grade_calculation(request: ManualGradeRequest):
         "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
         "formula_expression": get_formula_expression(gender_lower),
         "total_score": total_score,
-        "bone_age": round(bone_age, 2),
-        "confidence": round(confidence, 1),
+        "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
+        "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
         "joint_grades": {k: {"grade_raw": v} for k, v in grades.items() if v is not None},
         "joint_semantic_13": joint_semantic_13,
         "joint_rus_details": rus_details,

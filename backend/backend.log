@@ -57,3 +57,9 @@ INFO:     127.0.0.1:53268 - "GET /bone-age-points HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53290 - "GET /predictions HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53274 - "GET /bone-age-trend HTTP/1.1" 200 OK
 INFO:     127.0.0.1:40878 - "POST /user/ai-consult-image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47790 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41846 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41862 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41866 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41882 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41884 - "POST /predict HTTP/1.1" 503 Service Unavailable
