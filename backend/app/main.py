@@ -2751,7 +2751,10 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
@@ -2818,7 +2821,10 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
@@ -2902,7 +2908,10 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
