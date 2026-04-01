@@ -208,26 +208,11 @@ const ConsultationPage: React.FC = () => {
                         <ArrowLeft size={18} />
                         返回首页
                     </button>
-                    <div className={styles.pageHeading}>
-                        <span className={styles.pageEyebrow}>AI Consultation</span>
-                        <h1>智能健康问诊</h1>
-                        <p>面向家长与临床医生的统一智能问答入口，延续首页的圆角卡片与柔和玻璃质感。</p>
-                    </div>
+                    {/* 去除了智能健康问诊标题长栏，仅保留返回按钮以节省空间 */}
                 </div>
             )}
             <div className={`${styles.consultationCard} ${isStandaloneRoute ? styles.standaloneCard : styles.embeddedCard}`}>
-                <header className={styles.header}>
-                    <div className={styles.graphicBox}>
-                        <Bot size={32} />
-                    </div>
-                    <div className={styles.titleGroup}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h2>智能健康问诊</h2>
-                            <span className={styles.aiBadge}>V2.0 AI Turbo</span>
-                        </div>
-                        <p>{isDoctor ? '临床决策辅助助手' : '您的私人 AI 生长发育顾问'}</p>
-                    </div>
-                </header>
+                {/* 去除了内部卡片标题栏 */}
 
                 <div className={styles.chatDisplay}>
                     {messages.length === 0 && (

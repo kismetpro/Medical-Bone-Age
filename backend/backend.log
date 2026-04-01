@@ -1,0 +1,69 @@
+正在启动后端服务...
+INFO:     Started server process [124612]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Refreshed built-in account 'admin' (role 'super_admin')
+Refreshed built-in account 'doctor' (role 'doctor')
+Refreshed built-in account 'user' (role 'user')
+Loading models on cpu...
+WARNING: Fracture model not found: app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx
+WARNING: No fold model file found under app/models
+ERROR: No age model loaded!
+WARNING: joint model not found: app/models/joints/best_DIP.pth
+WARNING: joint model not found: app/models/joints/best_DIPFirst.pth
+WARNING: joint model not found: app/models/joints/best_PIP.pth
+WARNING: joint model not found: app/models/joints/best_PIPFirst.pth
+WARNING: joint model not found: app/models/joints/best_MCP.pth
+WARNING: joint model not found: app/models/joints/best_MCPFirst.pth
+WARNING: joint model not found: app/models/joints/best_MIP.pth
+WARNING: joint model not found: app/models/joints/best_Radius.pth
+WARNING: joint model not found: app/models/joints/best_Ulna.pth
+Joint models loaded: 0
+WARNING: Joint recognize model not found: app/models/recognize/best.pt
+INFO:     127.0.0.1:33986 - "GET /doctor/patient-users HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:33982 - "GET /predictions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:33990 - "GET /doctor/patient-users HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:33992 - "GET /predictions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:34004 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34006 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34022 - "GET /doctor/patient-users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34026 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34042 - "GET /doctor/patient-users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49894 - "POST /user/ai-consult-image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60652 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60668 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60678 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60692 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60706 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60714 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60708 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60716 - "GET /articles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60728 - "GET /qa/questions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60742 - "GET /articles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60744 - "GET /qa/questions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51818 - "POST /user/ai-consult-image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53176 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53180 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53188 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53200 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53216 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53226 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53230 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53248 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53262 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53240 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53268 - "GET /bone-age-points HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53290 - "GET /predictions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53274 - "GET /bone-age-trend HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40878 - "POST /user/ai-consult-image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47790 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41846 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41862 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41866 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41882 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:41884 - "POST /predict HTTP/1.1" 503 Service Unavailable
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [124612]

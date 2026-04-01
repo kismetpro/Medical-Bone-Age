@@ -55,6 +55,9 @@ def calc_bone_age_from_score(score, gender):
     Calculate bone age (years) from total RUS-CHN score.
     Ref: Pyqt5-and-BoneAge-main/utils.py
     """
+    if score is None or math.isnan(score):
+        return 0.0
+
     # Formula is valid for score roughly 0-1000
     if gender == 'male':
         boneAge = 2.01790023656577 + (-0.0931820870747269)*score + math.pow(score,2)*0.00334709095418796 +\
@@ -70,6 +73,8 @@ def calc_bone_age_from_score(score, gender):
         math.pow(score,8)* (1.162435538672E-18) +math.pow(score,9)*(-5.12713017846218E-22) +\
         math.pow(score,10)* (9.78989966891478E-26)
     
+    if math.isnan(boneAge) or math.isinf(boneAge):
+        return 0.0
     return max(0, boneAge)
 
 def find_score_for_age(target_age, gender):

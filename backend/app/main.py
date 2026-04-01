@@ -1186,6 +1186,43 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
         )
 
 
+def _ensure_builtin_accounts(conn: sqlite3.Connection):
+    """Ensure standard built-in accounts exist and have the correct passwords: admin, doctor, user."""
+    builtin = [
+        ("admin", "Admin123456", ROLE_SUPER_ADMIN),
+        ("doctor", "Doctor123456", ROLE_DOCTOR),
+        ("user", "User123456", ROLE_USER),
+    ]
+    now_iso = _to_iso(_utc_now())
+    for username, password, role in builtin:
+        salt_hex = secrets.token_hex(16)
+        pw_hash = hash_password(password, salt_hex, PBKDF2_ITERATIONS)
+        
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not row:
+            conn.execute(
+                """
+                INSERT INTO users (username, role, password_hash, password_salt, iterations, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (username, role, pw_hash, salt_hex, PBKDF2_ITERATIONS, now_iso),
+            )
+            print(f"Created built-in account '{username}' with role '{role}'")
+        else:
+            # Force update role and password to match requested built-in credentials
+            conn.execute(
+                """
+                UPDATE users 
+                SET role = ?, password_hash = ?, password_salt = ?, iterations = ?
+                WHERE username = ?
+                """,
+                (role, pw_hash, salt_hex, PBKDF2_ITERATIONS, username),
+            )
+            # Invalidate existing sessions for security
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+            print(f"Refreshed built-in account '{username}' (role '{role}')")
+
+
 def init_auth_db():
     with get_auth_conn() as conn:
         _create_users_table(conn)
@@ -1222,6 +1259,7 @@ def init_auth_db():
         )
         if _auth_role_migration_needed(conn):
             _migrate_auth_role_schema(conn)
+        _ensure_builtin_accounts(conn)
         _ensure_default_super_admin(conn)
         conn.commit()
 
@@ -2713,7 +2751,10 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
@@ -2780,7 +2821,10 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
@@ -2864,7 +2908,10 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
                             break
                         try:
                             data = json.loads(data_str)
-                            delta = data.get('choices', [{}])[0].get('delta', {})
+                            choices = data.get('choices', [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content', '')
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
@@ -2957,6 +3004,9 @@ async def joint_grading_predict(
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
+            # 确保分数为有效数字
+            if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
+                joint_rus_total_score = 0
             joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
 
         return {
@@ -3049,8 +3099,8 @@ async def formula_calculation(
             "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
             "formula_expression": get_formula_expression(gender_lower),
             "total_score": total_score,
-            "bone_age": round(bone_age, 2),
-            "confidence": round(confidence, 1),
+            "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
+            "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_details": rus_details,
@@ -3115,8 +3165,8 @@ async def manual_grade_calculation(request: ManualGradeRequest):
         "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
         "formula_expression": get_formula_expression(gender_lower),
         "total_score": total_score,
-        "bone_age": round(bone_age, 2),
-        "confidence": round(confidence, 1),
+        "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
+        "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
         "joint_grades": {k: {"grade_raw": v} for k, v in grades.items() if v is not None},
         "joint_semantic_13": joint_semantic_13,
         "joint_rus_details": rus_details,
