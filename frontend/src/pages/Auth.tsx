@@ -118,8 +118,22 @@ export default function Auth() {
         className={styles.authCard}
       >
         <div className={styles.headerArea}>
-          <Activity className={styles.iconPrimary} size={40} />
-          <h2>骨龄智能平台</h2>
+          <div
+            className={styles.brandLink}
+            onClick={() => navigate('/')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate('/');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="返回首页"
+          >
+            <Activity className={styles.iconPrimary} size={40} />
+            <h2>骨龄智能平台</h2>
+          </div>
           <p>{isLogin ? '欢迎回来，请登录您的账号。' : '创建账号后即可开始使用系统。'}</p>
         </div>
 

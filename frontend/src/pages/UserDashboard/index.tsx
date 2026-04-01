@@ -27,17 +27,12 @@ import PredictTab from './components/PredictTab';
 import HistoryTab from './components/HistoryTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
-import JointGradeTab from './components/JointGradeTab';
 import SettingsTab from './components/SettingsTab';
-import FormulaMethodTab from './components/FormulaMethodTab';
 import ImagePreprocessingTab from './components/ImagePreprocessingTab';
-import ManualGradeTab from './components/ManualGradeTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
     const navigate = useNavigate();
-    // 1. 增加一个独立的状态，不要共用 result
-    const [jointResult, setJointResult] = useState<PredictionResult | null>(null);
 
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
@@ -52,7 +47,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -490,7 +485,7 @@ return (
         {/* 1. 侧边栏：状态清理门卫 */}
         <UserSidebar 
             activeTab={activeTab} 
-            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'joint-grade' | 'settings' | 'preprocessing' | 'formula' | 'manual-grade') => {
+            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing') => {
                 if (tab !== activeTab) {
                     setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
                     setLoading(false); // 强制停止加载动画
@@ -571,43 +566,6 @@ return (
                         generateComparisonData={generateComparisonData}
                         getEvaluation={getEvaluation}
                     />
-                )}
-
-                {/* --- 小关节分级 Tab --- */}
-                {activeTab === 'joint-grade' && (
-                    <div className={styles.jointContainer}>
-                        <div className={styles.resultsCard}>
-                            <h3 style={{ marginBottom: '1.2rem' }}>小关节成熟度分级</h3>
-                            {/* 重点：使用独立的 jointResult。
-                                即使此处 setResult 被触发，改变的也只是 jointResult，
-                                不会触发 PredictTab 的重新渲染或逻辑报错。
-                            */}
-                            <JointGradeTab 
-                                result={jointResult} 
-                                setResult={setJointResult} 
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* --- 公式法预测骨龄 Tab --- */}
-                {activeTab === 'formula' && (
-                    <div className={styles.jointContainer}>
-                        <div className={styles.resultsCard}>
-                            <h3 style={{ marginBottom: '1.2rem' }}>公式法预测骨龄</h3>
-                            <FormulaMethodTab 
-                                result={jointResult} 
-                                setResult={setJointResult} 
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* --- 手动分级计算 Tab --- */}
-                {activeTab === 'manual-grade' && (
-                    <div className={styles.jointContainer}>
-                        <ManualGradeTab result={null} />
-                    </div>
                 )}
 
                 {/* --- 系统设置 Tab --- */}
