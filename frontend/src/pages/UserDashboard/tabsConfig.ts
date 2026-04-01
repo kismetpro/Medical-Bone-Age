@@ -1,9 +1,10 @@
 // 文件路径: src/pages/UserDashboard/tabsConfig.ts
 import PredictTab from './components/PredictTab';
+import ImagePreprocessingTab from './components/ImagePreprocessingTab';
 import HistoryTab from './components/HistoryTab';
-import JointGradeTab from './components/JointGradeTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
+import SettingsTab from './components/SettingsTab';
 
 export const TABS_CONFIG = {
   predict: {
@@ -11,15 +12,15 @@ export const TABS_CONFIG = {
     label: '骨龄预测',
     component: PredictTab,
   },
+  preprocessing: {
+    id: 'preprocessing',
+    label: '图像预处理',
+    component: ImagePreprocessingTab,
+  },
   history: {
     id: 'history',
     label: '评估历史',
     component: HistoryTab,
-  },
-  'joint-grade': {
-    id: 'joint-grade',
-    label: '小关节分级',
-    component: JointGradeTab,
   },
   consultation: {
     id: 'consultation',
@@ -30,6 +31,11 @@ export const TABS_CONFIG = {
     id: 'community',
     label: '交流社区',
     component: CommunityPage,
+  },
+  settings: {
+    id: 'settings',
+    label: '系统设置',
+    component: SettingsTab,
   },
 };
 

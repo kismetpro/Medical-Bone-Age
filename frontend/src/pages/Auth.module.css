@@ -58,6 +58,20 @@
   z-index: 1;
 }
 
+.brandLink {
+  cursor: pointer;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  outline: none;
+}
+
+.brandLink:focus-visible {
+  outline: 2px solid rgba(102, 126, 234, 0.45);
+  outline-offset: 6px;
+  border-radius: 12px;
+}
+
 .iconPrimary {
   color: #667eea;
   filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.5));

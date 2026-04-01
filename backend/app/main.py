@@ -1476,11 +1476,27 @@ def _resolve_token(request: Request, payload_token: Optional[str]) -> Optional[s
 # ----------------------------
 # Utils
 # ----------------------------
-def preprocess_image_bytes(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0) -> bytes:
+MAX_UPLOAD_IMAGE_BYTES = 20 * 1024 * 1024
+
+
+def validate_image_content(image_bytes: bytes) -> np.ndarray:
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Image file is empty")
+    if len(image_bytes) > MAX_UPLOAD_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image file is too large")
+
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
-        raise ValueError("Could not decode image")
+        raise HTTPException(status_code=400, detail="Invalid image content")
+    if img.ndim != 3 or img.shape[0] < 8 or img.shape[1] < 8:
+        raise HTTPException(status_code=400, detail="Image dimensions are invalid")
+
+    return img
+
+
+def preprocess_image_bytes(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0) -> bytes:
+    img = validate_image_content(image_bytes)
     
     if contrast != 1.0 or brightness != 0.0:
         img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
@@ -1491,10 +1507,7 @@ def preprocess_image_bytes(image_bytes: bytes, brightness: float = 0.0, contrast
     return buffer.tobytes()
 
 def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0):
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Could not decode image")
+    img = validate_image_content(image_bytes)
     
     # 应用图像增强: contrast (alpha) 和 brightness (beta)
     # 建议对比度 13.24
@@ -2967,9 +2980,13 @@ async def joint_grading_predict(
 
     try:
         content = await file.read()
+        validate_image_content(content)
 
         if preprocessing_enabled:
-            processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+            try:
+                processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+            except Exception:
+                processed_content = content
         else:
             processed_content = content
 
@@ -3001,14 +3018,15 @@ async def joint_grading_predict(
         joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
         joint_semantic_13 = {}
-        joint_rus_total_score = None
+        joint_rus_total_score = 0.0
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
+            # 计算分数
+            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
             # 确保分数为有效数字
             if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
-                joint_rus_total_score = 0
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+                joint_rus_total_score = 0.0
 
         return {
             "success": True,
@@ -3020,10 +3038,12 @@ async def joint_grading_predict(
             "joint_rus_total_score": joint_rus_total_score,
             "joint_rus_details": joint_rus_details,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"小关节分级预测失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"小关节分级诊断失败: {exc}")
 
 
 @app.post("/formula-calculation")
@@ -3049,6 +3069,7 @@ async def formula_calculation(
             raise HTTPException(status_code=400, detail="Invalid joints JSON format")
 
         content = await file.read()
+        validate_image_content(content)
 
         # 将用户绘制的关节框转换为模型需要的格式
         detected_joints = {}
@@ -3082,6 +3103,8 @@ async def formula_calculation(
         # 语义对齐和RUS评分计算
         joint_semantic_13 = align_joint_semantics(joint_grades)
         total_score, rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+        if total_score is not None and (math.isnan(total_score) or math.isinf(total_score)):
+            total_score = 0.0
 
         # 使用RUS-CHN公式计算骨龄
         bone_age = calc_bone_age_from_score(total_score, gender_lower)
@@ -3113,7 +3136,7 @@ async def formula_calculation(
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"公式计算失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"公式法计算失败: {exc}")
 
 
 class ManualGradeRequest(BaseModel):

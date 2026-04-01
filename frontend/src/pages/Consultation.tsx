@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, Sparkles, Send, MessageSquare, Flame, Lightbulb, Stethoscope, Image as ImageIcon, X } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, MessageSquare, Flame, Lightbulb, Stethoscope, Image as ImageIcon, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { buildAuthHeaders } from '../lib/api';
 import { API_BASE } from '../config';

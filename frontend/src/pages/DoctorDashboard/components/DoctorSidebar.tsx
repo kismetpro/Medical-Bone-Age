@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Users, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut, Settings, Image as ImageIcon } from 'lucide-react';
+import { Activity, Users, MessageSquare, Bot, ShieldCheck, User as UserIcon, LogOut, Settings, Image as ImageIcon, Bone, Calculator, Edit3 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../DoctorDashboard.module.css';
 import type { ActiveTab } from '../types';
@@ -38,43 +38,6 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                 >
                     <Users size={18} /> 患者记录
                 </button>
-                
-                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
-                
-                <button 
-                    className={`${styles.navItem} ${activeTab === 'consultation' ? styles.active : ''}`} 
-                    onClick={() => {
-                        if (setActiveTab) setActiveTab('consultation');
-                        if (!isDashboard) navigate('/doctor-dashboard');
-                    }}
-                >
-                    <Bot size={18} /> AI 助手
-                </button>
-                
-                <button 
-                    className={`${styles.navItem} ${activeTab === 'community' ? styles.active : ''}`} 
-                    onClick={() => {
-                        if (setActiveTab) setActiveTab('community');
-                        if (!isDashboard) navigate('/doctor-dashboard');
-                    }}
-                >
-                    <MessageSquare size={18} /> 问答社区
-                </button>
-
-                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
-
-                {isSuperAdmin && (
-                    <button 
-                        className={`${styles.navItem} ${isDashboard && activeTab === 'accounts' ? styles.active : ''}`} 
-                        onClick={() => {
-                            if (isDashboard && setActiveTab) setActiveTab('accounts');
-                            else navigate('/doctor-dashboard');
-                        }}
-                    >
-                        <ShieldCheck size={18} /> 账号管理
-                    </button>
-                )}
-                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
                     className={`${styles.navItem} ${activeTab === 'preprocessing' ? styles.active : ''}`} 
                     onClick={() => {
@@ -84,6 +47,66 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                 >
                     <ImageIcon size={18} /> 图像预处理
                 </button>
+                {isSuperAdmin && (
+                    <>
+                        <button 
+                            className={`${styles.navItem} ${activeTab === 'joint-grade' ? styles.active : ''}`} 
+                            onClick={() => {
+                                if (setActiveTab) setActiveTab('joint-grade');
+                                if (!isDashboard) navigate('/doctor-dashboard');
+                            }}
+                        >
+                            <Bone size={18} /> 小关节成熟度分级
+                        </button>
+                        <button 
+                            className={`${styles.navItem} ${activeTab === 'formula' ? styles.active : ''}`} 
+                            onClick={() => {
+                                if (setActiveTab) setActiveTab('formula');
+                                if (!isDashboard) navigate('/doctor-dashboard');
+                            }}
+                        >
+                            <Calculator size={18} /> 公式法预测骨龄
+                        </button>
+                        <button 
+                            className={`${styles.navItem} ${activeTab === 'manual-grade' ? styles.active : ''}`} 
+                            onClick={() => {
+                                if (setActiveTab) setActiveTab('manual-grade');
+                                if (!isDashboard) navigate('/doctor-dashboard');
+                            }}
+                        >
+                            <Edit3 size={18} /> 手动输入骨骼分级
+                        </button>
+                        <button 
+                            className={`${styles.navItem} ${isDashboard && activeTab === 'accounts' ? styles.active : ''}`} 
+                            onClick={() => {
+                                if (isDashboard && setActiveTab) setActiveTab('accounts');
+                                else navigate('/doctor-dashboard');
+                            }}
+                        >
+                            <ShieldCheck size={18} /> 账号管理
+                        </button>
+                    </>
+                )}
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'consultation' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('consultation');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
+                >
+                    <Bot size={18} /> AI 助手
+                </button>
+                <button 
+                    className={`${styles.navItem} ${activeTab === 'community' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('community');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
+                >
+                    <MessageSquare size={18} /> 问答社区
+                </button>
+                <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
                     className={`${styles.navItem} ${activeTab === 'settings' ? styles.active : ''}`} 
                     onClick={() => {

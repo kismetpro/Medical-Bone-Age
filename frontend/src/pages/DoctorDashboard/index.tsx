@@ -13,6 +13,7 @@ import type {
 import type { 
     ActiveTab
 } from './types';
+import type { PredictionResult } from '../UserDashboard/types';
 
 // --- Components ---
 import DoctorSidebar from './components/DoctorSidebar';
@@ -23,6 +24,9 @@ import CommunityPage from '../Community';
 import { PredictionModal, DetailModal } from './components/Modals';
 import DoctorSettingsTab from './components/DoctorSettingsTab';
 import DoctorImagePreprocessingTab from './components/DoctorImagePreprocessingTab';
+import JointGradeTab from '../UserDashboard/components/JointGradeTab';
+import FormulaMethodTab from '../UserDashboard/components/FormulaMethodTab';
+import ManualGradeTab from '../UserDashboard/components/ManualGradeTab';
 
 export default function DoctorDashboard() {
   const { username, role, logout } = useAuth();
@@ -32,6 +36,7 @@ export default function DoctorDashboard() {
   const predictionFileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('records');
+  const [jointResult, setJointResult] = useState<PredictionResult | null>(null);
   const [records, setRecords] = useState<PredictionRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<PredictionDetail | null>(null);
@@ -345,6 +350,27 @@ export default function DoctorDashboard() {
         {activeTab === 'preprocessing' && (
           <DoctorImagePreprocessingTab 
             username={username}
+          />
+        )}
+
+        {activeTab === 'joint-grade' && isSuperAdmin && (
+          <JointGradeTab 
+            result={jointResult}
+            setResult={setJointResult}
+          />
+        )}
+
+        {activeTab === 'formula' && isSuperAdmin && (
+          <FormulaMethodTab 
+            result={jointResult}
+            setResult={setJointResult}
+          />
+        )}
+
+        {activeTab === 'manual-grade' && isSuperAdmin && (
+          <ManualGradeTab 
+            result={jointResult}
+            setResult={setJointResult}
           />
         )}
       </main>
