@@ -87,31 +87,54 @@ export default function DoctorDashboard() {
 // 这里的逻辑：监听 Tab 切换，并自动“搬运”数据
 useEffect(() => {
   // 1. 原有的超级管理员逻辑（保持不变）
-  if (isSuperAdmin && activeTab === 'accounts') {
-    void fetchAccounts();
-  } else if (activeTab === 'accounts') {
-    setActiveTab('records');
-  }
+//   if (isSuperAdmin && activeTab === 'accounts') {
+//     void fetchAccounts();
+//   } else if (activeTab === 'accounts') {
+//     setActiveTab('records');
+//   }
 
   // 2. 【新增】临床医生的“小关节识别”与“公式法”数据搬运逻辑
   // 定义哪些 Tab 需要用到 jointResult 数据
+//   const medicalTabs: ActiveTab[] = ['joint-grade', 'formula', 'manual-grade'];
+//
+//   if (medicalTabs.includes(activeTab)) {
+//     // 如果“餐盘”是空的，但“仓库”里有刚才点开的病例数据
+// //     if (!jointResult && selectedRecord) {
+// //       // 核心动作：把数据搬过去，组件瞬间就能渲染了
+// //       setJointResult(selectedRecord as unknown as PredictionResult);
+// //       console.log("已自动为医生端同步小关节识别数据");
+// //     }
+// //     // 如果仓库也是空的（医生没选病人就直接点 Tab）
+// //     else if (!jointResult ) {
+// //       // 引导医生回列表页选病人
+// //       setPredictionMessage({ type: 'error', text: '请先在记录列表中点击“查看”或“评估”一个病例。' });
+// //       setActiveTab('records');
+// //     }
+// //   }
+// }, [activeTab, isSuperAdmin, selectedRecord, jointResult]); // 必须监听这四个变量
+// useEffect(() => {
+  // 1. 超级管理员：账号管理逻辑
+  if (isSuperAdmin && activeTab === 'accounts') {
+    void fetchAccounts();
+  } else if (activeTab === 'accounts') {
+    setActiveTab('records'); // 越权拦截，踢回记录页
+  }
+
+  // 2. 医生端：小关节识别与评估逻辑
   const medicalTabs: ActiveTab[] = ['joint-grade', 'formula', 'manual-grade'];
 
   if (medicalTabs.includes(activeTab)) {
-    // 如果“餐盘”是空的，但“仓库”里有刚才点开的病例数据
-    if (!jointResult && selectedRecord) {
-      // 核心动作：把数据搬过去，组件瞬间就能渲染了
+    // 【关键】只有当“仓库”里有选中的病例，且“组件”还没收到数据时，才执行搬运
+    if (selectedRecord && !jointResult) {
       setJointResult(selectedRecord as unknown as PredictionResult);
-      console.log("已自动为医生端同步小关节识别数据");
+      console.log("数据已自动同步到评估 Tab");
     }
-    // 如果仓库也是空的（医生没选病人就直接点 Tab）
-    else if (!jointResult && !selectedRecord) {
-      // 引导医生回列表页选病人
-      setPredictionMessage({ type: 'error', text: '请先在记录列表中点击“查看”或“评估”一个病例。' });
-      setActiveTab('records');
-    }
+
+    // 【注意】不要在这里写任何 setActiveTab('records')
+    // 这样即便数据没加载出来，页面也只是停留在当前 Tab 显示“暂无数据”
+    // 而不会因为逻辑判断还没跑完就把你强制踢走
   }
-}, [activeTab, isSuperAdmin, selectedRecord, jointResult]); // 必须监听这四个变量
+}, [activeTab, isSuperAdmin, selectedRecord, jointResult]);
 
   useEffect(() => () => {
     if (predictionPreview) {
@@ -218,16 +241,46 @@ useEffect(() => {
     }
   };
 
-  const viewDetails = async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE}/predictions/${id}`, { credentials: 'include', headers: buildAuthHeaders() });
-      if (!response.ok) throw new Error(await readErrorMessage(response));
-      const data = await response.json();
-      setSelectedRecord(normalizePredictionResult<PredictionDetail>(data.data, data.data?.real_age_years));
-    } catch (error) {
-      alert(error instanceof Error ? error.message : '加载详情失败');
-    }
-  };
+//   const viewDetails = async (id: string) => {
+//     try {
+//       const response = await fetch(`${API_BASE}/predictions/${id}`, { credentials: 'include', headers: buildAuthHeaders() });
+//       if (!response.ok) throw new Error(await readErrorMessage(response));
+//       const data = await response.json();
+//       setSelectedRecord(normalizePredictionResult<PredictionDetail>(data.data, data.data?.real_age_years));
+//     } catch (error) {
+//       alert(error instanceof Error ? error.message : '加载详情失败');
+//     }
+//   };
+
+const viewDetails = async (id: string) => {
+  try {
+    // 1. 发起请求（保留你原有的配置）
+    const response = await fetch(`${API_BASE}/predictions/${id}`, {
+      credentials: 'include',
+      headers: buildAuthHeaders()
+    });
+
+    if (!response.ok) throw new Error(await readErrorMessage(response));
+
+    const data = await response.json();
+
+    // 2. 格式化数据
+    const normalized = normalizePredictionResult<PredictionDetail>(
+      data.data,
+      data.data?.real_age_years
+    );
+
+    // 3. 【核心修复】同步更新三个状态
+    setSelectedRecord(normalized);                // 更新详情弹窗数据
+    setJointResult(normalized as any);            // 喂给小关节识别组件
+    setActiveTab('joint-grade');                  // 自动跳转到评估页面
+
+  } catch (error) {
+    // 4. 错误处理
+    console.error("加载详情失败:", error);
+    alert(error instanceof Error ? error.message : '加载详情失败');
+  }
+};
 
   const deletePredictionRecord = async (record: PredictionRecord) => {
     if (!window.confirm(`确认删除 ${record.username || `UID ${record.user_id}`} 的这条预测记录吗？相关联骨龄点位也会被删除。`)) return;

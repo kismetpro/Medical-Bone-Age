@@ -47,7 +47,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                 >
                     <ImageIcon size={18} /> 图像预处理
                 </button>
-                { (
+
                     <>
                         <button 
                             className={`${styles.navItem} ${activeTab === 'joint-grade' ? styles.active : ''}`} 
@@ -70,7 +70,8 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         <button 
                             className={`${styles.navItem} ${activeTab === 'manual-grade' ? styles.active : ''}`} 
                             onClick={() => {
-                                if (setActiveTab) setActiveTab('manual-grade');
+                                if (setActiveTab)
+                                 setActiveTab('manual-grade');
                                 if (!isDashboard) navigate('/doctor-dashboard');
                             }}
                         >
@@ -88,7 +89,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         </button>
                         )}
                     </>
-                )}
+
 
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
