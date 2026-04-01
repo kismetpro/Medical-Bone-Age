@@ -2967,9 +2967,13 @@ async def joint_grading_predict(
 
     try:
         content = await file.read()
+        validate_image_content(content)
 
         if preprocessing_enabled:
-            processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+            try:
+                processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+            except Exception:
+                processed_content = content
         else:
             processed_content = content
 
@@ -3001,14 +3005,15 @@ async def joint_grading_predict(
         joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
         joint_semantic_13 = {}
-        joint_rus_total_score = None
+        joint_rus_total_score = 0.0
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
+            # 计算分数
+            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
             # 确保分数为有效数字
             if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
-                joint_rus_total_score = 0
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+                joint_rus_total_score = 0.0
 
         return {
             "success": True,
@@ -3020,10 +3025,12 @@ async def joint_grading_predict(
             "joint_rus_total_score": joint_rus_total_score,
             "joint_rus_details": joint_rus_details,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"小关节分级预测失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"小关节分级诊断失败: {exc}")
 
 
 @app.post("/formula-calculation")
@@ -3082,6 +3089,8 @@ async def formula_calculation(
         # 语义对齐和RUS评分计算
         joint_semantic_13 = align_joint_semantics(joint_grades)
         total_score, rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+        if total_score is not None and (math.isnan(total_score) or math.isinf(total_score)):
+            total_score = 0.0
 
         # 使用RUS-CHN公式计算骨龄
         bone_age = calc_bone_age_from_score(total_score, gender_lower)
@@ -3113,7 +3122,7 @@ async def formula_calculation(
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"公式计算失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"公式法计算失败: {exc}")
 
 
 class ManualGradeRequest(BaseModel):
