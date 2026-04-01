@@ -13,7 +13,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(191, 219, 254, 0.28), transparent 26%),
+    radial-gradient(circle at 76% 18%, rgba(224, 231, 255, 0.28), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.18) 100%);
   z-index: -1;
   pointer-events: none;
 }

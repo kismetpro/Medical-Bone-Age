@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv8 骨龄关节精准识别</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="nav-glass"></div>
+    <header class="hero">
+        <div class="hero-content fade-up">
+            <h1 class="hero-title">重新定义精准<br><span class="gradient-text">骨龄关节识别</span></h1>
+            <p class="hero-subtitle">基于最新的 YOLOv8 架构，为手部小关节检测带来前所未有的精度与速度。mAP50 达到 99%+，为您提供专业、可靠的医疗 AI 辅助。</p>
+            <div class="hero-metrics">
+                <div class="metric">
+                    <h3>1.00</h3>
+                    <span>最高精度</span>
+                </div>
+                <div class="metric">
+                    <h3>1.00</h3>
+                    <span>F1 得分</span>
+                </div>
+                <div class="metric">
+                    <h3>99%</h3>
+                    <span>正确率</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Section 1: 训练与验证指标 -->
+        <section class="feature-section">
+            <div class="feature-content slide-in-left">
+                <h2 class="section-title">极其稳定的非凡表现</h2>
+                <p class="section-text">从训练的第一步起，我们就致力于打造一个绝对可靠的模型。损失函数持续下降并极具稳定性，定位、分类能力稳步提升。在验证集上，平均精度（mAP）快速攀升至接近 1.0，体现了对各个尺寸和位置的手部骨骼近乎完美的定位与识别能力。</p>
+            </div>
+            <div class="feature-image-container slide-in-right">
+                <img src="results.png" alt="Training and Validation Metrics" class="glass-image">
+            </div>
+        </section>
+
+        <!-- Section 2: Precision -->
+        <section class="feature-section reverse">
+            <div class="feature-content slide-in-right">
+                <h2 class="section-title">无懈可击的精度</h2>
+                <p class="section-text">精度与置信度曲线彰显了模型极低的误报率。当置信度阈值在 0.84 周围时，整体目标精度达到了惊人的 <strong>1.00</strong>。这意味着所有的预测框几乎全为真实阳性。各类别关节检测效果高度一致，展现出极致的医疗级可靠性。</p>
+            </div>
+            <div class="feature-image-container slide-in-left">
+                <img src="BoxP_curve.png" alt="Precision-Confidence Curve" class="glass-image">
+            </div>
+        </section>
+        
+        <!-- Section 3: Recall -->
+        <section class="feature-section">
+            <div class="feature-content slide-in-left">
+                <h2 class="section-title">绝不漏掉任何细节</h2>
+                <p class="section-text">骨龄评估，每一块重要骨骼都不容缺失。模型在 0 到 0.6 的宽广低阈值区间内，召回率高达 <strong>1.00</strong>。不论关节如何重叠或是影像条件如何限制，它都能极其敏锐地捕捉到几乎所有的关键小关节（Radius、Ulna、MCP 等），提供全面的检测保障。</p>
+            </div>
+            <div class="feature-image-container slide-in-right">
+                <img src="BoxR_curve.png" alt="Recall-Confidence Curve" class="glass-image">
+            </div>
+        </section>
+
+        <!-- Section 4: F1 Score -->
+        <section class="feature-section reverse">
+            <div class="feature-content slide-in-right">
+                <h2 class="section-title">精与准的完美平衡</h2>
+                <p class="section-text">F1 综合得分是检验模型综合素质的终极标准。在置信度 0.616 的状态下，模型取得了完美的 <strong>1.00</strong> F1 评分。它成功打破了精度与召回率不可兼顾的瓶颈，在一个广泛的最佳阈值区间内，维持着顶尖级核心检测水平。</p>
+            </div>
+            <div class="feature-image-container slide-in-left">
+                <img src="BoxF1_curve.png" alt="F1-Confidence Curve" class="glass-image">
+            </div>
+        </section>
+
+        <!-- Section 5: Confusion Matrix -->
+        <section class="feature-section full-width relative">
+            <div class="feature-full-content fade-up">
+                <h2 class="section-title center-title">对每一个关节了如指掌</h2>
+                <p class="section-text center-text">透过混淆矩阵可以清晰地看到：主要关节如 ProximalPhalanx、MCP 与 DistalPhalanx 的分类无与伦比。背景误识别率几乎为零。即使是常常导致干扰的相近解剖部位，也被模型精准地划分开来，毫无混淆。</p>
+                <div class="matrix-grid">
+                    <div class="matrix-card">
+                        <img src="confusion_matrix.png" alt="Confusion Matrix" class="glass-image">
+                        <p class="matrix-caption">绝对数量统计，错误预测寥寥无几。</p>
+                    </div>
+                    <div class="matrix-card">
+                        <img src="confusion_matrix_normalized.png" alt="Normalized Confusion Matrix" class="glass-image">
+                        <p class="matrix-caption">比例归一化，展现多数 1.00 的无暇表现。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <p>基于 YOLOv8 的手部小关节医学预测模型性能展示</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
