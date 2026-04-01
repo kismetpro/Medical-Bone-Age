@@ -47,7 +47,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                 >
                     <ImageIcon size={18} /> 图像预处理
                 </button>
-                {isSuperAdmin && (
+                { (
                     <>
                         <button 
                             className={`${styles.navItem} ${activeTab === 'joint-grade' ? styles.active : ''}`} 
@@ -76,6 +76,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         >
                             <Edit3 size={18} /> 手动输入骨骼分级
                         </button>
+{isSuperAdmin&&(
                         <button 
                             className={`${styles.navItem} ${isDashboard && activeTab === 'accounts' ? styles.active : ''}`} 
                             onClick={() => {
@@ -85,8 +86,10 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         >
                             <ShieldCheck size={18} /> 账号管理
                         </button>
+                        )}
                     </>
                 )}
+
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
                     className={`${styles.navItem} ${activeTab === 'consultation' ? styles.active : ''}`} 

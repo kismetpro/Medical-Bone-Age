@@ -77,13 +77,41 @@ export default function DoctorDashboard() {
     void fetchPatientUsers();
   }, []);
 
-  useEffect(() => {
-    if (isSuperAdmin && activeTab === 'accounts') {
-      void fetchAccounts();
-    } else if (activeTab === 'accounts') {
+//   useEffect(() => {
+//     if (isSuperAdmin && activeTab === 'accounts') {
+//       void fetchAccounts();
+//     } else if (activeTab === 'accounts') {
+//       setActiveTab('records');
+//     }
+//   }, [activeTab, isSuperAdmin]);
+// 这里的逻辑：监听 Tab 切换，并自动“搬运”数据
+useEffect(() => {
+  // 1. 原有的超级管理员逻辑（保持不变）
+  if (isSuperAdmin && activeTab === 'accounts') {
+    void fetchAccounts();
+  } else if (activeTab === 'accounts') {
+    setActiveTab('records');
+  }
+
+  // 2. 【新增】临床医生的“小关节识别”与“公式法”数据搬运逻辑
+  // 定义哪些 Tab 需要用到 jointResult 数据
+  const medicalTabs: ActiveTab[] = ['joint-grade', 'formula', 'manual-grade'];
+
+  if (medicalTabs.includes(activeTab)) {
+    // 如果“餐盘”是空的，但“仓库”里有刚才点开的病例数据
+    if (!jointResult && selectedRecord) {
+      // 核心动作：把数据搬过去，组件瞬间就能渲染了
+      setJointResult(selectedRecord as unknown as PredictionResult);
+      console.log("已自动为医生端同步小关节识别数据");
+    }
+    // 如果仓库也是空的（医生没选病人就直接点 Tab）
+    else if (!jointResult && !selectedRecord) {
+      // 引导医生回列表页选病人
+      setPredictionMessage({ type: 'error', text: '请先在记录列表中点击“查看”或“评估”一个病例。' });
       setActiveTab('records');
     }
-  }, [activeTab, isSuperAdmin]);
+  }
+}, [activeTab, isSuperAdmin, selectedRecord, jointResult]); // 必须监听这四个变量
 
   useEffect(() => () => {
     if (predictionPreview) {
@@ -353,21 +381,21 @@ export default function DoctorDashboard() {
           />
         )}
 
-        {activeTab === 'joint-grade' && isSuperAdmin && (
+        {activeTab === 'joint-grade' &&(
           <JointGradeTab 
             result={jointResult}
             setResult={setJointResult}
           />
         )}
 
-        {activeTab === 'formula' && isSuperAdmin && (
+        {activeTab === 'formula'  &&(
           <FormulaMethodTab 
             result={jointResult}
             setResult={setJointResult}
           />
         )}
 
-        {activeTab === 'manual-grade' && isSuperAdmin && (
+        {activeTab === 'manual-grade'  && (
           <ManualGradeTab 
             result={jointResult}
             setResult={setJointResult}
