@@ -29,6 +29,7 @@ import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
 import SettingsTab from './components/SettingsTab';
 import ImagePreprocessingTab from './components/ImagePreprocessingTab';
+import BoneAgeDevelopmentTab from './components/BoneAgeDevelopmentTab';
 
 export default function UserDashboard() {
     const { username, logout } = useAuth();
@@ -47,7 +48,7 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
@@ -485,7 +486,7 @@ return (
         {/* 1. 侧边栏：状态清理门卫 */}
         <UserSidebar 
             activeTab={activeTab} 
-            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing') => {
+            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development') => {
                 if (tab !== activeTab) {
                     setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
                     setLoading(false); // 强制停止加载动画
@@ -602,6 +603,7 @@ return (
 
                 {activeTab === 'consultation' && <ConsultationPage />}
                 {activeTab === 'community' && <CommunityPage />}
+                {activeTab === 'bone-age-development' && <BoneAgeDevelopmentTab />}
             </div>
         </main>
     </div>

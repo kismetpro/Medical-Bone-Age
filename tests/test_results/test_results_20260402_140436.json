@@ -1,0 +1,102 @@
+{
+  "timestamp": "20260402_140436",
+  "api_results": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0,
+    "details": [
+      {
+        "name": "根路径接口",
+        "passed": true,
+        "duration": 0.0019979476928710938,
+        "details": "状态码: 200",
+        "metrics": null
+      },
+      {
+        "name": "用户注册",
+        "passed": true,
+        "duration": 0.12058854103088379,
+        "details": "用户名: testuser_1775109876, 角色: user",
+        "metrics": null
+      },
+      {
+        "name": "用户登录",
+        "passed": true,
+        "duration": 0.11730289459228516,
+        "details": "用户名: testuser_1775109876, 角色: user",
+        "metrics": null
+      },
+      {
+        "name": "Token验证",
+        "passed": true,
+        "duration": 0.0045320987701416016,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "用户登录",
+        "passed": true,
+        "duration": 0.12150144577026367,
+        "details": "用户名: doctor, 角色: doctor",
+        "metrics": null
+      },
+      {
+        "name": "手动分级计算",
+        "passed": true,
+        "duration": 0.005026578903198242,
+        "details": "状态码: 200",
+        "metrics": {
+          "total_score": 103,
+          "bone_age": 6.01,
+          "confidence": 100.0
+        }
+      },
+      {
+        "name": "获取预测记录",
+        "passed": true,
+        "duration": 0.010300159454345703,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "骨龄数据点",
+        "passed": true,
+        "duration": 0.010991096496582031,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "骨龄趋势",
+        "passed": true,
+        "duration": 0.004001617431640625,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "文章列表",
+        "passed": true,
+        "duration": 0.0050013065338134766,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "问答列表",
+        "passed": true,
+        "duration": 0.003000020980834961,
+        "details": "",
+        "metrics": null
+      },
+      {
+        "name": "用户登出",
+        "passed": true,
+        "duration": 0.006137371063232422,
+        "details": "",
+        "metrics": null
+      }
+    ]
+  },
+  "performance_results": {
+    "bone_age_metrics": {},
+    "performance_metrics": {}
+  }
+}

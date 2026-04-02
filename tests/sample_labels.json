@@ -1,0 +1,97 @@
+{
+  "sample_001.jpg": {
+    "gender": "male",
+    "age": 5.5,
+    "grades": {
+      "Radius": 5,
+      "Ulna": 4,
+      "MCPFirst": 3,
+      "MCPThird": 3,
+      "MCPFifth": 3,
+      "PIPFirst": 4,
+      "PIPThird": 3,
+      "PIPFifth": 3,
+      "MIPThird": 3,
+      "MIPFifth": 3,
+      "DIPFirst": 4,
+      "DIPThird": 3,
+      "DIPFifth": 3
+    }
+  },
+  "sample_002.jpg": {
+    "gender": "female",
+    "age": 7.2,
+    "grades": {
+      "Radius": 6,
+      "Ulna": 5,
+      "MCPFirst": 4,
+      "MCPThird": 4,
+      "MCPFifth": 4,
+      "PIPFirst": 5,
+      "PIPThird": 4,
+      "PIPFifth": 4,
+      "MIPThird": 4,
+      "MIPFifth": 4,
+      "DIPFirst": 5,
+      "DIPThird": 4,
+      "DIPFifth": 4
+    }
+  },
+  "sample_003.jpg": {
+    "gender": "male",
+    "age": 10.0,
+    "grades": {
+      "Radius": 8,
+      "Ulna": 7,
+      "MCPFirst": 6,
+      "MCPThird": 5,
+      "MCPFifth": 5,
+      "PIPFirst": 7,
+      "PIPThird": 6,
+      "PIPFifth": 5,
+      "MIPThird": 6,
+      "MIPFifth": 5,
+      "DIPFirst": 6,
+      "DIPThird": 5,
+      "DIPFifth": 5
+    }
+  },
+  "sample_004.jpg": {
+    "gender": "female",
+    "age": 3.8,
+    "grades": {
+      "Radius": 3,
+      "Ulna": 3,
+      "MCPFirst": 2,
+      "MCPThird": 2,
+      "MCPFifth": 2,
+      "PIPFirst": 3,
+      "PIPThird": 2,
+      "PIPFifth": 2,
+      "MIPThird": 2,
+      "MIPFifth": 2,
+      "DIPFirst": 3,
+      "DIPThird": 2,
+      "DIPFifth": 2
+    }
+  },
+  "sample_005.jpg": {
+    "gender": "male",
+    "age": 12.5,
+    "grades": {
+      "Radius": 10,
+      "Ulna": 9,
+      "MCPFirst": 8,
+      "MCPThird": 7,
+      "MCPFifth": 7,
+      "PIPFirst": 9,
+      "PIPThird": 7,
+      "PIPFifth": 7,
+      "MIPThird": 7,
+      "MIPFifth": 7,
+      "DIPFirst": 8,
+      "DIPThird": 7,
+      "DIPFifth": 7
+    }
+  }
+}

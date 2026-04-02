@@ -1,11 +1,11 @@
 import React from 'react';
-import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Settings, Image as ImageIcon } from 'lucide-react';
+import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Settings, Image as ImageIcon, TrendingUp } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 
 interface UserSidebarProps {
-    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing';
-    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing') => void;
+    activeTab?: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development';
+    setActiveTab?: (tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development') => void;
     username: string | null;
     handleLogout: () => void;
 }
@@ -51,6 +51,15 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                     }}
                 >
                     <HistoryIcon size={18} /> 预测记录
+                </button>
+                <button 
+                    className={`${styles.navItem} ${isDashboard && activeTab === 'bone-age-development' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (isDashboard && setActiveTab) setActiveTab('bone-age-development');
+                        else navigate('/user-dashboard');
+                    }}
+                >
+                    <TrendingUp size={18} /> 骨龄发展规律
                 </button>
                 <hr style={{ margin: '0.5rem 0', opacity: 0.1 }} />
                 <button 
