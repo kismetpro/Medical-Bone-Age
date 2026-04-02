@@ -235,7 +235,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                                         value={imgSettings.contrast} 
                                         onChange={(e) => setImgSettings({ ...imgSettings, contrast: Number(e.target.value) })} 
                                     />
-                                    <small style={{ marginLeft: '10px', color: '#64748b' }}>建议值: 13.24</small>
+
                                 </div>
                             </div>
                             <div className={styles.preRow}>
