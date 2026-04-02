@@ -595,7 +595,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                                             value={imgSettings.contrast} 
                                             onChange={(e) => setImgSettings({ ...imgSettings, contrast: Number(e.target.value) })} 
                                         />
-                                        <small>建议值: 13.24</small>
+
                                     </div>
                                 </div>
                                 <div className={styles.preRow}>
