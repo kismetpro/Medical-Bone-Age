@@ -403,7 +403,7 @@ class SmallJointRecognizer:
         self.imgsz = imgsz
         self.conf = conf
 
-    def _render_with_plt(self, img_bgr: np.ndarray, joints: Dict[str, Dict], hand_side: str) -> Optional[str]:
+    def _render_with_plt(self, img_bgr: np.ndarray, joints: Dict[str, Dict], hand_side: str, grades: Dict[str, Dict] = None) -> Optional[str]:
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         fig, ax = plt.subplots(figsize=(8, 10), dpi=120)
         ax.imshow(img_rgb)
@@ -419,10 +419,20 @@ class SmallJointRecognizer:
                 linewidth=2,
             )
             ax.add_patch(rect)
+            
+            # 基础标签：名称 + 置信度
+            label = f"{name} {payload['score']:.2f}"
+            
+            # 如果提供了分级信息，则在标签中加入分级
+            if grades and name in grades:
+                grade = grades[name].get('grade_raw')
+                if grade is not None:
+                    label += f" G:{grade}"
+            
             ax.text(
                 x1,
                 max(0.0, y1 - 6.0),
-                f"{name} {payload['score']:.2f}",
+                label,
                 color="white",
                 fontsize=8,
                 bbox={"facecolor": "red", "alpha": 0.65, "pad": 1.5},
@@ -3039,6 +3049,25 @@ async def joint_grading_predict(
             # 确保分数为有效数字
             if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
                 joint_rus_total_score = 0.0
+
+        # 【新增】重新生成包含分级信息的 Plot 图片
+        if joint_recognizer and joint_grades:
+            try:
+                # 解码图像用于绘图
+                nparr = np.frombuffer(processed_content, np.uint8)
+                img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                img_bgr = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
+                
+                new_plot = joint_recognizer._render_with_plt(
+                    img_bgr, 
+                    recognized_joints_13.get("joints", {}), 
+                    recognized_joints_13.get("hand_side", "unknown"),
+                    grades=joint_grades
+                )
+                if new_plot:
+                    recognized_joints_13["plot_image_base64"] = new_plot
+            except Exception as plot_exc:
+                print(f"Re-rendering plot with grades failed: {plot_exc}")
 
         return {
             "success": True,

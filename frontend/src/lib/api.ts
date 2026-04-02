@@ -92,6 +92,7 @@ export const detectJoints = async (
             score: joint.score || 1.0,
             status: 'ok'
         })),
+        plot_image_base64: data.joint_detect_13?.plot_image_base64,
         joint_grades: data.joint_grades,
         joint_semantic_13: data.joint_semantic_13,
         joint_rus_total_score: data.joint_rus_total_score,

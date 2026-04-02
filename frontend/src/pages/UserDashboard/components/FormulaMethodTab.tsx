@@ -82,6 +82,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     const [currentJointIndex, setCurrentJointIndex] = useState(0);
     const [drawingStart, setDrawingStart] = useState<{ x: number; y: number } | null>(null);
     const [drawingEnd, setDrawingEnd] = useState<{ x: number; y: number } | null>(null);
+    const [autoPlotImage, setAutoPlotImage] = useState<string | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previewRef = useRef<HTMLDivElement>(null);
@@ -103,6 +104,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                 setPreview(ev.target?.result as string);
                 // 重置关节框
                 setJointBoxes([]);
+                setAutoPlotImage(null);
                 setFormulaResult(RUS_CHN_FORMULA);
             };
             reader.readAsDataURL(selectedFile);
@@ -119,6 +121,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
             reader.onload = (ev) => {
                 setPreview(ev.target?.result as string);
                 setJointBoxes([]);
+                setAutoPlotImage(null);
                 setFormulaResult(RUS_CHN_FORMULA);
                 setCurrentJointIndex(0);
             };
@@ -216,6 +219,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     // 清除所有手动绘制的关节框
     const clearManualJoints = () => {
         setJointBoxes([]);
+        setAutoPlotImage(null);
         setCurrentJointIndex(0);
         setFormulaResult(RUS_CHN_FORMULA);
     };
@@ -255,6 +259,10 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
             });
 
             setJointBoxes(detectedJoints);
+            
+            if (data.plot_image_base64) {
+                setAutoPlotImage(data.plot_image_base64);
+            }
             
             await calculateFormulaResult(detectedJoints);
             
@@ -440,7 +448,12 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                                 </div>
                             )}
 
-                            <img src={preview} alt="X-Ray" className={styles.previewImage} style={imageStyle} />
+                            <img 
+                                src={(detectionMode === 'auto' && autoPlotImage) ? autoPlotImage : preview} 
+                                alt="X-Ray" 
+                                className={styles.previewImage} 
+                                style={(detectionMode === 'auto' && autoPlotImage) ? { maxWidth: '100%', borderRadius: '8px' } : imageStyle} 
+                            />
                             
                             {/* 临时绘制框 */}
                             {isDrawing && drawingStart && drawingEnd && (
@@ -458,8 +471,8 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                                 }} />
                             )}
                             
-                            {/* 显示关节框 */}
-                            {jointBoxes.map(joint => (
+                            {/* 显示关节框 (仅平衡手动模式) */}
+                            {(!autoPlotImage || detectionMode === 'manual') && jointBoxes.map(joint => (
                                 <div
                                     key={joint.id}
                                     style={getBoxStyle(joint)}
