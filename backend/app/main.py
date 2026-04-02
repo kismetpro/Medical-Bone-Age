@@ -235,6 +235,7 @@ class JointGrader:
         if x2 <= x1 or y2 <= y1:
             return None
         return img_bgr[y1:y2, x1:x2].copy()
+    #这里是小关节分级逻辑，去掉了对图像的预处理
 
     @torch.no_grad()
     def predict(self, image_bytes: bytes, img_size: int, mean: np.ndarray, std: np.ndarray):
@@ -242,6 +243,8 @@ class JointGrader:
             return {}
 
         x = self.preprocess(image_bytes, img_size, mean, std)
+        # x =  image_bytes
+        x = cv2.resize(x, (1024, 1024))
         out = {}
 
         for joint, item in self.models.items():
@@ -273,6 +276,8 @@ class JointGrader:
 
         nparr = np.frombuffer(image_bytes, np.uint8)
         img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        #修改了size
+        img_bgr = cv2.resize(img_bgr, (img_size, img_size))
         if img_bgr is None:
             raise ValueError("Could not decode image for detected-joint grading")
 
@@ -446,11 +451,13 @@ class SmallJointRecognizer:
             return {"hand_side": "unknown", "detected_count": 0, "joints": {}, "plot_image_base64": None}
 
         h, w = img_bgr.shape[:2]
+        #调试缩放比例
+        img_bgr = cv2.resize(img_bgr, (self.imgsz, self.imgsz))
         result = self.model.predict(
             source=img_bgr,
             imgsz=self.imgsz,
             conf=self.conf,
-            verbose=False,
+            verbose=True,
         )[0]
 
         all_d = []
@@ -768,7 +775,7 @@ DEFAULT_AGE_MIN = 1.0
 DEFAULT_AGE_MAX = 228.0
 
 IMG_SIZE = 256
-JOINT_IMG_SIZE = 224
+JOINT_IMG_SIZE = 1024
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -2989,6 +2996,8 @@ async def joint_grading_predict(
                 processed_content = content
         else:
             processed_content = content
+        with open("check_this_image.jpg", "wb") as f:
+            f.write(processed_content)  # 运行后去服务器目录下看看这张图正正常
 
         recognized_joints_13 = {
             "hand_side": "unknown",
@@ -3014,6 +3023,9 @@ async def joint_grading_predict(
             )
         except Exception as joint_exc:
             print(f"Joint grading failed: {joint_exc}")
+        # with open("check_this_image1.jpg", "wb") as f:
+        #     f.write(processed_content)
+        # 运行后去服务器目录下看看这张图正正常
 
         joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
