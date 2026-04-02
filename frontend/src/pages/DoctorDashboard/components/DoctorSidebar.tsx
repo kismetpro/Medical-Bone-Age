@@ -58,7 +58,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                         >
                             <Bone size={18} /> 小关节成熟度分级
                         </button>
-                        <button 
+                        {/* <button 
                             className={`${styles.navItem} ${activeTab === 'formula' ? styles.active : ''}`} 
                             onClick={() => {
                                 if (setActiveTab) setActiveTab('formula');
@@ -66,7 +66,7 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                             }}
                         >
                             <Calculator size={18} /> 公式法预测骨龄
-                        </button>
+                        </button> */}
                         <button 
                             className={`${styles.navItem} ${activeTab === 'manual-grade' ? styles.active : ''}`} 
                             onClick={() => {

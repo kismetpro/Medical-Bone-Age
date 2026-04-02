@@ -2,18 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Scatter, Line, Legend } from 'recharts';
 import { RefreshCw, Download, Info } from 'lucide-react';
 import styles from '../UserDashboard.module.css';
-
-interface BoneAgeDataPoint {
-    age: number; // 实际年龄（岁）
-    boneAge: number; // 骨龄（岁）
-    gender: 'male' | 'female';
-    status: 'normal' | 'advanced' | 'delayed';
-}
-
-interface GeneratedData {
-    male: BoneAgeDataPoint[];
-    female: BoneAgeDataPoint[];
-}
+import {
+    generateBoneAgeData,
+    calculateStatistics,
+    generateNormalRangeData,
+    exportBoneAgeDataToCSV,
+    type GeneratedData,
+} from '../../../lib/boneAgeDevelopment';
 
 const BoneAgeDevelopmentTab: React.FC = () => {
     const [gender, setGender] = useState<'male' | 'female' | 'both'>('both');
@@ -21,132 +16,13 @@ const BoneAgeDevelopmentTab: React.FC = () => {
     const [dataPoints, setDataPoints] = useState<number>(50);
     const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
 
-    // 骨龄发展规律参数
-    const developmentParams = {
-        male: {
-            // 男孩骨龄发展速度（岁/年）- 不同年龄段
-            velocity: [
-                { minAge: 0, maxAge: 2, rate: 1.2 }, // 婴幼儿期发展较快
-                { minAge: 2, maxAge: 6, rate: 1.0 }, // 幼儿期正常发展
-                { minAge: 6, maxAge: 10, rate: 0.9 }, // 学龄期稍慢
-                { minAge: 10, maxAge: 14, rate: 1.1 }, // 青春期加速
-                { minAge: 14, maxAge: 18, rate: 0.8 }, // 青春期后期减缓
-                { minAge: 18, maxAge: 25, rate: 0.3 }, // 成年期趋缓
-            ],
-            // 骨龄与实际年龄的正常差异范围（岁）
-            normalRange: 1.0,
-            // 青春期加速年龄范围
-            pubertalAcceleration: { start: 11, peak: 13, end: 16 },
-        },
-        female: {
-            velocity: [
-                { minAge: 0, maxAge: 2, rate: 1.3 },
-                { minAge: 2, maxAge: 6, rate: 1.05 },
-                { minAge: 6, maxAge: 9, rate: 0.95 },
-                { minAge: 9, maxAge: 12, rate: 1.15 },
-                { minAge: 12, maxAge: 15, rate: 0.85 },
-                { minAge: 15, maxAge: 20, rate: 0.4 },
-            ],
-            normalRange: 1.0,
-            pubertalAcceleration: { start: 9, peak: 11, end: 13 },
-        },
+    const generateData = () => {
+        const data = generateBoneAgeData(dataPoints, dataPoints);
+        setGeneratedData(data);
     };
 
-    // 生成符合骨龄发展规律的数据
-    const generateBoneAgeData = () => {
-        const maleData: BoneAgeDataPoint[] = [];
-        const femaleData: BoneAgeDataPoint[] = [];
+    const normalRangeData = useMemo(() => generateNormalRangeData(20, 0.5, 1.0), []);
 
-        // 生成男性数据
-        for (let i = 0; i < dataPoints; i++) {
-            const age = Math.random() * 20; // 0-20岁随机
-            const boneAge = calculateBoneAge(age, 'male');
-            const diff = boneAge - age;
-            let status: 'normal' | 'advanced' | 'delayed' = 'normal';
-            if (diff > 1) status = 'advanced';
-            else if (diff < -1) status = 'delayed';
-
-            maleData.push({
-                age: parseFloat(age.toFixed(2)),
-                boneAge: parseFloat(boneAge.toFixed(2)),
-                gender: 'male',
-                status,
-            });
-        }
-
-        // 生成女性数据
-        for (let i = 0; i < dataPoints; i++) {
-            const age = Math.random() * 20;
-            const boneAge = calculateBoneAge(age, 'female');
-            const diff = boneAge - age;
-            let status: 'normal' | 'advanced' | 'delayed' = 'normal';
-            if (diff > 1) status = 'advanced';
-            else if (diff < -1) status = 'delayed';
-
-            femaleData.push({
-                age: parseFloat(age.toFixed(2)),
-                boneAge: parseFloat(boneAge.toFixed(2)),
-                gender: 'female',
-                status,
-            });
-        }
-
-        // 按年龄排序
-        maleData.sort((a, b) => a.age - b.age);
-        femaleData.sort((a, b) => a.age - b.age);
-
-        setGeneratedData({ male: maleData, female: femaleData });
-    };
-
-    // 根据年龄和性别计算骨龄
-    const calculateBoneAge = (age: number, gender: 'male' | 'female'): number => {
-        const params = developmentParams[gender];
-
-        // 基础骨龄计算
-        let boneAge = 0;
-        let lastAge = 0;
-
-        for (const stage of params.velocity) {
-            if (age <= stage.minAge) break;
-
-            const stageAge = Math.min(age, stage.maxAge) - Math.max(lastAge, stage.minAge);
-            if (stageAge > 0) {
-                boneAge += stageAge * stage.rate;
-            }
-            lastAge = stage.maxAge;
-            if (age <= stage.maxAge) break;
-        }
-
-        // 添加青春期加速效应
-        const { start, peak, end } = params.pubertalAcceleration;
-        if (age >= start && age <= end) {
-            // 使用抛物线模拟青春期加速
-            const acceleration = 1 - Math.pow((age - peak) / ((end - start) / 2), 2);
-            boneAge += acceleration * 0.5; // 青春期额外增加
-        }
-
-        // 添加随机变异（±0.8岁范围内的正态分布变异）
-        const randomVariation = (Math.random() - 0.5) * 1.6;
-        boneAge += randomVariation;
-
-        // 确保骨龄不小于0
-        return Math.max(0, boneAge);
-    };
-
-    // 生成正常范围数据
-    const normalRangeData = useMemo(() => {
-        const data = [];
-        for (let age = 0; age <= 20; age += 0.5) {
-            data.push({
-                age,
-                upper: age + 1,
-                lower: age - 1,
-            });
-        }
-        return data;
-    }, []);
-
-    // 获取显示数据
     const displayData = useMemo(() => {
         if (!generatedData) return [];
 
@@ -172,45 +48,15 @@ const BoneAgeDevelopmentTab: React.FC = () => {
         return data;
     }, [generatedData, gender]);
 
-    // 统计信息
     const statistics = useMemo(() => {
         if (!generatedData) return null;
-
-        const allData = [...generatedData.male, ...generatedData.female];
-        const normalCount = allData.filter(d => d.status === 'normal').length;
-        const advancedCount = allData.filter(d => d.status === 'advanced').length;
-        const delayedCount = allData.filter(d => d.status === 'delayed').length;
-
-        return {
-            total: allData.length,
-            normal: normalCount,
-            advanced: advancedCount,
-            delayed: delayedCount,
-            normalPercent: ((normalCount / allData.length) * 100).toFixed(1),
-            advancedPercent: ((advancedCount / allData.length) * 100).toFixed(1),
-            delayedPercent: ((delayedCount / allData.length) * 100).toFixed(1),
-        };
+        return calculateStatistics(generatedData);
     }, [generatedData]);
 
-    // 导出数据
-    const exportData = () => {
-        if (!generatedData) return;
-
-        const allData = [
-            ...generatedData.male,
-            ...generatedData.female,
-        ];
-
-        const csvContent = [
-            '实际年龄(岁),骨龄(岁),性别,状态',
-            ...allData.map(d => `${d.age},${d.boneAge},${d.gender},${d.status}`),
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `骨龄发展规律数据_${new Date().toLocaleDateString()}.csv`;
-        link.click();
+    const handleExport = () => {
+        if (generatedData) {
+            exportBoneAgeDataToCSV(generatedData);
+        }
     };
 
     return (
@@ -221,14 +67,14 @@ const BoneAgeDevelopmentTab: React.FC = () => {
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button
                             className={styles.btnPrimary}
-                            onClick={generateBoneAgeData}
+                            onClick={generateData}
                             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                         >
                             <RefreshCw size={16} /> 生成数据
                         </button>
                         {generatedData && (
                             <button
-                                onClick={exportData}
+                                onClick={handleExport}
                                 style={{
                                     padding: '0.5rem 1rem',
                                     borderRadius: '6px',

@@ -97,6 +97,8 @@ export async function submitPredictionRequest({
   preprocessingEnabled = false,
   brightness = 0,
   contrast = 1,
+  quickMode = false,
+  minimalMode = false,
   headers = {},
 }: {
   file: File;
@@ -107,6 +109,8 @@ export async function submitPredictionRequest({
   preprocessingEnabled?: boolean;
   brightness?: number;
   contrast?: number;
+  quickMode?: boolean;
+  minimalMode?: boolean;
   headers?: Record<string, string>;
 }) {
   const formData = new FormData();
@@ -127,6 +131,8 @@ export async function submitPredictionRequest({
   formData.append('preprocessing_enabled', String(preprocessingEnabled));
   formData.append('brightness', String(brightness));
   formData.append('contrast', String(contrast));
+  formData.append('quick_mode', String(quickMode));
+  formData.append('minimal_mode', String(minimalMode));
 
   const response = await fetch(`${API_BASE}/predict`, {
     method: 'POST',

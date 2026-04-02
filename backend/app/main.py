@@ -243,8 +243,7 @@ class JointGrader:
             return {}
 
         x = self.preprocess(image_bytes, img_size, mean, std)
-        # x =  image_bytes
-        x = cv2.resize(x, (1024, 1024))
+        x = torch.nn.functional.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
         out = {}
 
         for joint, item in self.models.items():
@@ -262,7 +261,7 @@ class JointGrader:
 
         return out
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def predict_detected_joints(
         self,
         image_bytes: bytes,
@@ -362,7 +361,7 @@ class FractureDetector:
             return [], None
 
         img_640 = cv2.resize(img_orig, (640, 640), interpolation=cv2.INTER_LINEAR)
-        ok, buf = cv2.imencode(".jpg", img_640)
+        ok, buf = cv2.imencode(".jpg", img_640, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         detection_image_base64 = None
         if ok:
             detection_image_base64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
@@ -404,8 +403,8 @@ class SmallJointRecognizer:
         self.conf = conf
 
     def _render_with_plt(self, img_bgr: np.ndarray, joints: Dict[str, Dict], hand_side: str, grades: Dict[str, Dict] = None) -> Optional[str]:
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        fig, ax = plt.subplots(figsize=(8, 10), dpi=120)
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
+        fig, ax = plt.subplots(figsize=(6, 8), dpi=80)
         ax.imshow(img_rgb)
 
         for name, payload in joints.items():
@@ -420,10 +419,8 @@ class SmallJointRecognizer:
             )
             ax.add_patch(rect)
             
-            # 基础标签：名称 + 置信度
             label = f"{name} {payload['score']:.2f}"
             
-            # 如果提供了分级信息，则在标签中加入分级
             if grades and name in grades:
                 grade = grades[name].get('grade_raw')
                 if grade is not None:
@@ -448,7 +445,7 @@ class SmallJointRecognizer:
         plt.close(fig)
 
         plot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        ok, buf = cv2.imencode(".jpg", plot_bgr)
+        ok, buf = cv2.imencode(".jpg", plot_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         if not ok:
             return None
 
@@ -467,7 +464,7 @@ class SmallJointRecognizer:
             source=img_bgr,
             imgsz=self.imgsz,
             conf=self.conf,
-            verbose=True,
+            verbose=False,
         )[0]
 
         all_d = []
@@ -706,37 +703,72 @@ def calc_rus_score(aligned_13: Dict, gender: str):
     return total_score, details
 
 
+def _is_valid_grade(grade_raw) -> bool:
+    if grade_raw is None:
+        return False
+    try:
+        g = float(grade_raw)
+        return not (math.isnan(g) or math.isinf(g))
+    except (TypeError, ValueError):
+        return False
+
+
+def _compute_similar_joint_average(joint_grades: Dict, fallbacks: List[str]) -> Tuple[Optional[int], float]:
+    valid_grades = []
+    for cand in fallbacks:
+        c = joint_grades.get(cand)
+        if c and _is_valid_grade(c.get("grade_raw")):
+            valid_grades.append((int(c.get("grade_raw", 1)), float(c.get("score", 0.0))))
+    if not valid_grades:
+        return None, 0.0
+    avg_grade = sum(g for g, s in valid_grades) / len(valid_grades)
+    avg_score = sum(s for g, s in valid_grades) / len(valid_grades)
+    return int(round(avg_grade)), avg_score
+
+
 def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
     """
     对没有对应模型或裁剪失败的关节做语义补全。
     规则:
-    - 仅补全 grade_raw 为空的关节
-    - 使用 FALLBACKS 中的候选关节
+    - 仅补全 grade_raw 为空或NaN的关节
+    - 使用 FALLBACKS 中的候选关节计算平均值
     - 置信度做轻微折减，并标记 imputed
     """
     if not joint_grades:
         return {}
 
-    aligned = dict(joint_grades)
+    aligned = {}
     for joint in RUS_13:
-        payload = aligned.get(joint)
-        if payload and payload.get("grade_raw", None) is not None:
-            payload["imputed"] = False
-            aligned[joint] = payload
+        payload = joint_grades.get(joint, {})
+        grade_raw = payload.get("grade_raw") if isinstance(payload, dict) else None
+
+        if _is_valid_grade(grade_raw):
+            aligned[joint] = {
+                "model_joint": payload.get("model_joint") if isinstance(payload, dict) else None,
+                "grade_idx": payload.get("grade_idx") if isinstance(payload, dict) else None,
+                "grade_raw": int(grade_raw),
+                "score": float(payload.get("score", 0.0)) if isinstance(payload, dict) else 0.0,
+                "status": "ok",
+                "imputed": False,
+                "source_joint": joint,
+            }
             continue
 
-        picked = None
-        for cand in FALLBACKS.get(joint, []):
-            c = aligned.get(cand)
-            if c and c.get("grade_raw", None) is not None:
-                picked = c
-                picked_name = cand
-                break
+        avg_grade, avg_score = _compute_similar_joint_average(joint_grades, FALLBACKS.get(joint, []))
 
-        if picked is None:
-            base = payload if isinstance(payload, dict) else {}
+        if avg_grade is not None:
             aligned[joint] = {
-                "model_joint": base.get("model_joint", None),
+                "model_joint": None,
+                "grade_idx": None,
+                "grade_raw": avg_grade,
+                "score": round(avg_score * 0.95, 4),
+                "status": "semantic_imputed",
+                "imputed": True,
+                "source_joint": FALLBACKS.get(joint, [joint])[0] if FALLBACKS.get(joint) else "none",
+            }
+        else:
+            aligned[joint] = {
+                "model_joint": None,
                 "grade_idx": None,
                 "grade_raw": 1,
                 "score": 0.0,
@@ -744,18 +776,6 @@ def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
                 "imputed": True,
                 "source_joint": "none",
             }
-            continue
-
-        base_score = float(picked.get("score", 0.0))
-        aligned[joint] = {
-            "model_joint": picked.get("model_joint", None),
-            "grade_idx": picked.get("grade_idx", None),
-            "grade_raw": int(picked.get("grade_raw", 1)),
-            "score": round(base_score * 0.95, 4),
-            "status": "semantic_imputed",
-            "imputed": True,
-            "source_joint": picked_name,
-        }
 
     return aligned
 
@@ -1547,25 +1567,29 @@ def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: floa
     return torch.from_numpy(img).float()
 
 
-def predict_with_ensemble_tta_months(img_tensor: torch.Tensor, gender_tensor: torch.Tensor):
+def predict_with_ensemble_tta_months(img_tensor: torch.Tensor, gender_tensor: torch.Tensor, use_tta: bool = False, single_fold: bool = False):
     if not models_ensemble:
         raise RuntimeError("No age model loaded")
 
-    with torch.no_grad():
-        img_r1 = TF.rotate(img_tensor, -5)
-        img_r2 = TF.rotate(img_tensor, 5)
-
+    with torch.inference_mode():
+        models_to_use = [models_ensemble[0]] if single_fold and len(models_ensemble) > 0 else models_ensemble
+        
         fold_months = []
-        for item in models_ensemble:
+        for item in models_to_use:
             m = item["model"]
             age_min = item["age_min"]
             age_max = item["age_max"]
 
-            s1 = m(img_tensor, gender_tensor).item()
-            s2 = m(img_r1, gender_tensor).item()
-            s3 = m(img_r2, gender_tensor).item()
+            if use_tta:
+                img_r1 = TF.rotate(img_tensor, -5)
+                img_r2 = TF.rotate(img_tensor, 5)
+                s1 = m(img_tensor, gender_tensor).item()
+                s2 = m(img_r1, gender_tensor).item()
+                s3 = m(img_r2, gender_tensor).item()
+                fold_norm = (s1 + s2 + s3) / 3.0
+            else:
+                fold_norm = m(img_tensor, gender_tensor).item()
 
-            fold_norm = (s1 + s2 + s3) / 3.0
             fold_month = fold_norm * (age_max - age_min) + age_min
             fold_months.append(fold_month)
 
@@ -1584,13 +1608,14 @@ def build_gradcam_heatmap(img_tensor: torch.Tensor, gender_tensor: torch.Tensor)
         img_cam.requires_grad = True
 
         grad_cam = GradCAM(cam_model, target)
-        _, cam_mask = grad_cam(img_cam, gender_tensor)
+        with torch.inference_mode():
+            _, cam_mask = grad_cam(img_cam, gender_tensor)
 
         target._forward_hooks.clear()
         target._backward_hooks.clear()
 
         heatmap_img = overlay_heatmap(img_cam.detach().cpu(), cam_mask)
-        ok, buffer = cv2.imencode(".jpg", heatmap_img)
+        ok, buffer = cv2.imencode(".jpg", heatmap_img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         if not ok:
             return None
 
@@ -2299,6 +2324,9 @@ async def predict_bone_age(
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
     contrast: float = Form(1.0),
+    tta_enabled: bool = Form(False, description="Enable test-time augmentation (slower but more accurate)"),
+    quick_mode: bool = Form(False, description="Skip joint detection and grading for faster results"),
+    minimal_mode: bool = Form(False, description="Use single fold model for fastest prediction"),
 ):
     if not models_ensemble:
         raise HTTPException(status_code=503, detail="Age model not loaded")
@@ -2335,12 +2363,15 @@ async def predict_bone_age(
     gender_val = 1.0 if gender_lower == "male" else 0.0
     gender_tensor = torch.tensor([[gender_val]], dtype=torch.float32, device=device)
 
+    if minimal_mode:
+        quick_mode = True
+
     try:
         content = await file.read()
 
         anomalies = []
         detection_image_base64 = None
-        if fracture_detector:
+        if fracture_detector and not quick_mode:
             try:
                 anomalies, detection_image_base64 = fracture_detector.detect(
                     content,
@@ -2357,14 +2388,18 @@ async def predict_bone_age(
             "joints": {},
             "plot_image_base64": None,
         }
-        if joint_recognizer:
+        joint_grades = {}
+        joint_semantic_13 = {}
+        joint_rus_total_score = None
+        joint_rus_details = []
+
+        if not quick_mode and joint_recognizer:
             try:
                 recognized_joints_13 = joint_recognizer.recognize_13(content)
             except Exception as rec_exc:
                 print(f"Small joint recognize failed: {rec_exc}")
 
-        joint_grades = {}
-        if joint_grader:
+        if not quick_mode and joint_grader:
             try:
                 joint_grades = joint_grader.predict_detected_joints(
                     content,
@@ -2375,14 +2410,11 @@ async def predict_bone_age(
                 )
             except Exception as joint_exc:
                 print(f"Joint grading failed: {joint_exc}")
-        joint_grades = semantic_align_missing_joint_grades(joint_grades)
+            joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
-        joint_semantic_13 = {}
-        joint_rus_total_score = None
-        joint_rus_details = []
-        if joint_grades:
-            joint_semantic_13 = align_joint_semantics(joint_grades)
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+            if joint_grades:
+                joint_semantic_13 = align_joint_semantics(joint_grades)
+                joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
 
         # 决定是否使用预处理参数
         if preprocessing_enabled:
@@ -2390,7 +2422,7 @@ async def predict_bone_age(
         else:
             img_tensor = preprocess_image(content).to(device)
         
-        pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor)
+        pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor, use_tta=tta_enabled, single_fold=minimal_mode)
         pred_years = pred_months / 12.0
 
         report_details = generate_bone_report(pred_years, gender_lower)
@@ -2398,7 +2430,9 @@ async def predict_bone_age(
             predict_adult_height(height, pred_years, gender_lower) if height else None
         )
 
-        heatmap_base64 = build_gradcam_heatmap(img_tensor, gender_tensor)
+        heatmap_base64 = None
+        if not quick_mode:
+            heatmap_base64 = build_gradcam_heatmap(img_tensor, gender_tensor)
 
         result_payload = {
             "filename": file.filename,
@@ -2986,6 +3020,7 @@ async def joint_grading_predict(
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
     contrast: float = Form(1.0),
+    detect_only: bool = Form(False, description="Only detect joints, skip grading for faster response"),
 ):
     """小关节分级独立接口：仅进行13个小关节的检测与分级"""
     if not joint_grader:
@@ -3022,6 +3057,34 @@ async def joint_grading_predict(
             except Exception as rec_exc:
                 print(f"Small joint recognize failed: {rec_exc}")
 
+        if detect_only:
+            if joint_recognizer and recognized_joints_13.get("joints"):
+                try:
+                    nparr = np.frombuffer(processed_content, np.uint8)
+                    img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    img_bgr = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
+                    plot_base64 = joint_recognizer._render_with_plt(
+                        img_bgr,
+                        recognized_joints_13.get("joints", {}),
+                        recognized_joints_13.get("hand_side", "unknown"),
+                    )
+                    if plot_base64:
+                        recognized_joints_13["plot_image_base64"] = plot_base64
+                except Exception as plot_exc:
+                    print(f"Plot render failed in detect_only: {plot_exc}")
+
+            return {
+                "success": True,
+                "filename": file.filename,
+                "gender": gender_lower,
+                "joint_detect_13": recognized_joints_13,
+                "joint_grades": {},
+                "joint_semantic_13": {},
+                "joint_rus_total_score": None,
+                "joint_rus_details": [],
+                "detect_only": True,
+            }
+
         joint_grades = {}
         try:
             joint_grades = joint_grader.predict_detected_joints(
@@ -3033,9 +3096,6 @@ async def joint_grading_predict(
             )
         except Exception as joint_exc:
             print(f"Joint grading failed: {joint_exc}")
-        # with open("check_this_image1.jpg", "wb") as f:
-        #     f.write(processed_content)
-        # 运行后去服务器目录下看看这张图正正常
 
         joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
@@ -3044,16 +3104,12 @@ async def joint_grading_predict(
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
-            # 计算分数
             joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
-            # 确保分数为有效数字
             if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
                 joint_rus_total_score = 0.0
 
-        # 【新增】重新生成包含分级信息的 Plot 图片
         if joint_recognizer and joint_grades:
             try:
-                # 解码图像用于绘图
                 nparr = np.frombuffer(processed_content, np.uint8)
                 img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 img_bgr = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))

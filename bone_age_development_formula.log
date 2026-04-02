@@ -1,0 +1,382 @@
+This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.4) (preloaded format=xelatex 2026.3.14)  2 APR 2026 23:58
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**./docs/bone_age_development_formula.tex
+(docs/bone_age_development_formula.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+(C:\D\softwares\Matex\1\tex/latex/base\article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(C:\D\softwares\Matex\1\tex/latex/base\size10.clo
+File: size10.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count271
+\c@section=\count272
+\c@subsection=\count273
+\c@subsubsection=\count274
+\c@paragraph=\count275
+\c@subparagraph=\count276
+\c@figure=\count277
+\c@table=\count278
+\abovecaptionskip=\skip49
+\belowcaptionskip=\skip50
+\bibindent=\dimen148
+)
+(C:\D\softwares\Matex\1\tex/latex/amsmath\amsmath.sty
+Package: amsmath 2025/07/09 v2.17z AMS math features
+\@mathmargin=\skip51
+
+For additional information on amsmath, use the `?' option.
+(C:\D\softwares\Matex\1\tex/latex/amsmath\amstext.sty
+Package: amstext 2024/11/17 v2.01 AMS text
+
+(C:\D\softwares\Matex\1\tex/latex/amsmath\amsgen.sty
+File: amsgen.sty 1999/11/30 v2.0 generic functions
+\@emptytoks=\toks17
+\ex@=\dimen149
+))
+(C:\D\softwares\Matex\1\tex/latex/amsmath\amsbsy.sty
+Package: amsbsy 1999/11/29 v1.2d Bold Symbols
+\pmbraise@=\dimen150
+)
+(C:\D\softwares\Matex\1\tex/latex/amsmath\amsopn.sty
+Package: amsopn 2022/04/08 v2.04 operator names
+)
+\inf@bad=\count279
+LaTeX Info: Redefining \frac on input line 233.
+\uproot@=\count280
+\leftroot@=\count281
+LaTeX Info: Redefining \overline on input line 398.
+LaTeX Info: Redefining \colon on input line 409.
+\classnum@=\count282
+\DOTSCASE@=\count283
+LaTeX Info: Redefining \ldots on input line 495.
+LaTeX Info: Redefining \dots on input line 498.
+LaTeX Info: Redefining \cdots on input line 619.
+\Mathstrutbox@=\box53
+\strutbox@=\box54
+LaTeX Info: Redefining \big on input line 721.
+LaTeX Info: Redefining \Big on input line 722.
+LaTeX Info: Redefining \bigg on input line 723.
+LaTeX Info: Redefining \Bigg on input line 724.
+\big@size=\dimen151
+LaTeX Font Info:    Redeclaring font encoding OML on input line 742.
+LaTeX Font Info:    Redeclaring font encoding OMS on input line 743.
+\macc@depth=\count284
+LaTeX Info: Redefining \bmod on input line 904.
+LaTeX Info: Redefining \pmod on input line 909.
+LaTeX Info: Redefining \smash on input line 939.
+LaTeX Info: Redefining \relbar on input line 969.
+LaTeX Info: Redefining \Relbar on input line 970.
+\c@MaxMatrixCols=\count285
+\dotsspace@=\muskip17
+\c@parentequation=\count286
+\dspbrk@lvl=\count287
+\tag@help=\toks18
+\row@=\count288
+\column@=\count289
+\maxfields@=\count290
+\andhelp@=\toks19
+\eqnshift@=\dimen152
+\alignsep@=\dimen153
+\tagshift@=\dimen154
+\tagwidth@=\dimen155
+\totwidth@=\dimen156
+\lineht@=\dimen157
+\@envbody=\toks20
+\multlinegap=\skip52
+\multlinetaggap=\skip53
+\mathdisplay@stack=\toks21
+LaTeX Info: Redefining \[ on input line 2950.
+LaTeX Info: Redefining \] on input line 2951.
+)
+(C:\D\softwares\Matex\1\tex/latex/amsfonts\amssymb.sty
+Package: amssymb 2013/01/14 v3.01 AMS font symbols
+
+(C:\D\softwares\Matex\1\tex/latex/amsfonts\amsfonts.sty
+Package: amsfonts 2013/01/14 v3.01 Basic AMSFonts support
+\symAMSa=\mathgroup4
+\symAMSb=\mathgroup5
+LaTeX Font Info:    Redeclaring math symbol \hbar on input line 98.
+LaTeX Font Info:    Overwriting math alphabet `\mathfrak' in version `bold'
+(Font)                  U/euf/m/n --> U/euf/b/n on input line 106.
+))
+(C:\D\softwares\Matex\1\tex/latex/booktabs\booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen158
+\lightrulewidth=\dimen159
+\cmidrulewidth=\dimen160
+\belowrulesep=\dimen161
+\belowbottomsep=\dimen162
+\aboverulesep=\dimen163
+\abovetopsep=\dimen164
+\cmidrulesep=\dimen165
+\cmidrulekern=\dimen166
+\defaultaddspace=\dimen167
+\@cmidla=\count291
+\@cmidlb=\count292
+\@aboverulesep=\dimen168
+\@belowrulesep=\dimen169
+\@thisruleclass=\count293
+\@lastruleclass=\count294
+\@thisrulewidth=\dimen170
+)
+(C:\D\softwares\Matex\1\tex/latex/l3backend\l3backend-xetex.def
+File: l3backend-xetex.def 2025-10-09 L3 backend support: XeTeX
+\g__graphics_track_int=\count295
+\g__pdfannot_backend_int=\count296
+\g__pdfannot_backend_link_int=\count297
+)
+(bone_age_development_formula.aux)
+\openout1 = `bone_age_development_formula.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+
+Missing character: There is no 分 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 段 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 度 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 模 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 型 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 骨 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 发 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 展 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 采 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 用 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 分 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 段 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 线 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 度 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 模 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 型 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ， in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 不 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 同 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 年 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 段 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 有 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 不 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 同 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 的 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 发 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 展 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 率 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 。 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 男 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 发 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 展 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 参 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 数 in font [lmroman12-bold]:mapping=tex-text;!
+LaTeX Font Info:    Trying to load font information for U+msa on input line 20.
+
+(C:\D\softwares\Matex\1\tex/latex/amsfonts\umsa.fd
+File: umsa.fd 2013/01/14 v3.01 AMS symbols A
+)
+LaTeX Font Info:    Trying to load font information for U+msb on input line 20.
+
+
+(C:\D\softwares\Matex\1\tex/latex/amsfonts\umsb.fd
+File: umsb.fd 2013/01/14 v3.01 AMS symbols B
+)
+Missing character: There is no 女 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 发 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 展 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 参 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 数 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 骨 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 累 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 积 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 计 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 算 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 给 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 定 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 年 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 和 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 别 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ， in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 基 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 础 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 骨 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 为 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 离 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 散 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 化 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 形 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 式 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 其 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 中 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 为 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 第 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 阶 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 段 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 经 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 历 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 的 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 时 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 间 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 。 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 青 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 春 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 期 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 加 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 效 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 应 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 青 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 春 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 期 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 存 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 在 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 加 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 效 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 应 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ， in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 采 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 用 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 抛 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 物 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 线 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 模 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 型 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 加 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 后 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 的 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 骨 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 龄 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 其 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 中 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 为 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 加 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 幅 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 度 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 。 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 青 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 春 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 期 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 参 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 数 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 青 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 春 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 期 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 加 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 速 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 参 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 数 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 别 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 男 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 女 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 性 in font [lmroman10-regular]:mapping=tex-text;!
+[1
+
+]
+Missing character: There is no 个 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 体 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 变 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 异 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 引 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 入 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 随 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 机 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 变 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 异 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 模 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 拟 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 个 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 体 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 差 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 异 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 其 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 中 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ， in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 岁 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 。 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 成 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 年 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 身 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 高 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 预 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 测 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 基 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 于 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 方 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 法 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ， in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 成 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 年 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 身 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 高 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 百 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 分 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 比 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ： in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 成 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 年 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 身 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 高 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 预 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 测 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 公 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 式 in font [lmroman12-bold]:mapping=tex-text;!
+Missing character: There is no 其 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 中 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 为 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 当 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 前 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 身 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 高 in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no （ in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no ） in font [lmroman10-regular]:mapping=tex-text;!
+Missing character: There is no 。 in font [lmroman10-regular]:mapping=tex-text;!
+[2] (bone_age_development_formula.aux)
+ ***********
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+ ***********
+ ) 
+Here is how much of TeX's memory you used:
+ 1773 strings out of 402987
+ 24658 string characters out of 5453078
+ 434385 words of memory out of 5000000
+ 30505 multiletter control sequences out of 15000+600000
+ 629460 words of font info for 53 fonts, out of 8000000 for 9000
+ 1348 hyphenation exceptions out of 8191
+ 56i,10n,65p,251b,225s stack positions out of 10000i,1000n,20000p,200000b,200000s
+
+Output written on bone_age_development_formula.xdv (2 pages, 6988 bytes).

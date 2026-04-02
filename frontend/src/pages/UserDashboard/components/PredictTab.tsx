@@ -1,9 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { RefObject } from 'react';
-import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 } from 'lucide-react';
+import { Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2, Loader2 } from 'lucide-react';
 import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
+
+const LazyImage: React.FC<{ src: string; alt: string; className?: string; style?: React.CSSProperties }> = ({ src, alt, className, style }) => {
+    const [loaded, setLoaded] = useState(false);
+    return (
+        <div style={{ position: 'relative', ...style }}>
+            {!loaded && (
+                <div style={{ 
+                    position: 'absolute', inset: 0, 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: '#f1f5f9', borderRadius: '8px',
+                    color: '#64748b', fontSize: '0.875rem'
+                }}>
+                    <Loader2 size={20} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                </div>
+            )}
+            <img 
+                src={src} 
+                alt={alt} 
+                className={className} 
+                style={style} 
+                loading="lazy"
+                onLoad={() => setLoaded(true)}
+                onError={() => setLoaded(true)}
+            />
+        </div>
+    );
+};
 
 interface PredictTabProps {
     file: File | null;
@@ -292,7 +319,7 @@ const PredictTab: React.FC<PredictTabProps> = ({
                             <div className={styles.sectionBlock}>
                                 <h4>AI 特征焦点分析度与异常（GradCAM）</h4>
                                 <div className={styles.heatmapWrapper}>
-                                    <img src={result.heatmap_base64} alt="GradCAM" className={styles.heatmapImg}/>
+                                    <LazyImage src={result.heatmap_base64} alt="GradCAM" className={styles.heatmapImg} />
                                     {result.anomalies?.map((item, idx) => (
                                         item.score > 0.45 && (
                                             <div key={idx} style={getBoxStyle(item.coord)}>
