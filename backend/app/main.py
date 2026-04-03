@@ -142,7 +142,9 @@ class JointGrader:
             "PIPThird": "PIP",
             "PIPFifth": "PIP",
             "MCPFirst": "MCPFirst",
+            "MCPSecond": "MCP",
             "MCPThird": "MCP",
+            "MCPFourth": "MCP",
             "MCPFifth": "MCP",
             "MIPThird": "MIP",
             "MIPFifth": "MIP",
@@ -3037,20 +3039,25 @@ async def joint_grading_predict(
                     dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
                     if dpv3_results.get('success'):
                         recognized_joints_13["dpv3_enhanced"] = True
-                        hand_side = dpv3_results.get('hand_side', 'unknown')
 
-                        if hand_side == 'left':
-                            finger_order = ['First', 'Second', 'Third', 'Fourth', 'Fifth']
+                        radius_region = None
+                        ulna_region = None
+                        for region in dpv3_results.get('regions', []):
+                            label = region.get('label', 'Unknown')
+                            if label == 'Radius':
+                                radius_region = region
+                            elif label == 'Ulna':
+                                ulna_region = region
+
+                        if radius_region and ulna_region:
+                            radius_x = radius_region.get('centroid', (0, 0))[0]
+                            ulna_x = ulna_region.get('centroid', (0, 0))[0]
+                            if radius_x > ulna_x:
+                                hand_side = 'left'
+                            else:
+                                hand_side = 'right'
                         else:
-                            finger_order = ['Fifth', 'Fourth', 'Third', 'Second', 'First']
-
-                        finger_cn = {
-                            'First': '拇指',
-                            'Second': '食指',
-                            'Third': '中指',
-                            'Fourth': '环指',
-                            'Fifth': '小指'
-                        }
+                            hand_side = dpv3_results.get('hand_side', 'unknown')
 
                         recognized_joints_13["dpv3_info"] = {
                             "hand_side": hand_side,
@@ -3061,46 +3068,59 @@ async def joint_grading_predict(
                             "merged_blocks": dpv3_results.get('merged_blocks')
                         }
 
-                        finger_regions_map = {f: [] for f in finger_order}
+                        finger_labels_en = ['First', 'Second', 'Third', 'Fourth', 'Fifth']
+                        finger_labels_cn = ['拇指', '食指', '中指', '环指', '小指']
+
+                        if hand_side == 'left':
+                            finger_order = finger_labels_en
+                        else:
+                            finger_order = list(reversed(finger_labels_en))
+
+                        finger_regions_map = {f: [] for f in finger_labels_en}
+                        finger_cn_map = dict(zip(finger_labels_en, finger_labels_cn))
                         carpal_regions = []
 
+                        thumb_regions = []
+                        other_regions = []
+
                         for region in dpv3_results.get('regions', []):
                             label = region.get('label', 'Unknown')
-
-                            if 'First' in label:
-                                finger_regions_map['First'].append(region)
-                            elif label in ['Radius', 'Ulna', 'CarpalBone']:
+                            if label in ['Radius', 'Ulna']:
                                 carpal_regions.append(region)
+                            elif label == 'MCPFirst':
+                                thumb_regions.append(region)
+                            elif label in ['ProximalPhalanx', 'MCP', 'MiddlePhalanx', 'DistalPhalanx']:
+                                other_regions.append(region)
 
-                        non_finger_regions = []
-                        for region in dpv3_results.get('regions', []):
-                            label = region.get('label', 'Unknown')
-                            if 'First' not in label and label not in ['Radius', 'Ulna', 'CarpalBone']:
-                                non_finger_regions.append(region)
-
-                        if non_finger_regions:
-                            sorted_by_x = sorted(
-                                non_finger_regions,
-                                key=lambda r: r.get('centroid', (0, 0))[0]
-                            )
-
+                        if not thumb_regions and other_regions:
                             img_width = img_bgr.shape[1]
-                            thumb_positions = [r for r in sorted_by_x if r.get('centroid', (0, 0))[0] > img_width * 0.85]
-                            other_fingers = [r for r in sorted_by_x if r not in thumb_positions]
+                            thumb_threshold = img_width * 0.85 if hand_side == 'left' else img_width * 0.15
+                            if hand_side == 'left':
+                                thumb_regions = [r for r in other_regions if r.get('centroid', (0, 0))[0] > thumb_threshold]
+                            else:
+                                thumb_regions = [r for r in other_regions if r.get('centroid', (0, 0))[0] < thumb_threshold]
+                            other_regions = [r for r in other_regions if r not in thumb_regions]
 
-                            if thumb_positions:
-                                finger_regions_map['First'].extend(thumb_positions)
+                        finger_regions_map['First'].extend(thumb_regions)
 
-                            finger_labels = ['Second', 'Third', 'Fourth', 'Fifth']
-                            step = len(other_fingers) / 4
-                            for i, finger in enumerate(finger_labels):
+                        if other_regions:
+                            sorted_by_x = sorted(other_regions, key=lambda r: r.get('centroid', (0, 0))[0])
+
+                            if hand_side == 'left':
+                                sorted_by_x.reverse()
+
+                            step = len(sorted_by_x) / 4
+                            other_finger_labels = ['Second', 'Third', 'Fourth', 'Fifth']
+                            for i, finger in enumerate(other_finger_labels):
                                 start_idx = int(i * step)
-                                end_idx = int((i + 1) * step) if i < 3 else len(other_fingers)
-                                finger_regions_map[finger].extend(other_fingers[start_idx:end_idx])
+                                end_idx = int((i + 1) * step) if i < 3 else len(sorted_by_x)
+                                finger_regions_map[finger].extend(sorted_by_x[start_idx:end_idx])
 
                         joints = {}
                         ordered_joints = []
                         joint_index = 0
+
+                        label_counter = {f: {} for f in finger_order}
 
                         for finger in finger_order:
                             finger_regions = finger_regions_map[finger]
@@ -3118,11 +3138,25 @@ async def joint_grading_predict(
                                 bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
                                 x1, y1, x2, y2 = bbox_coords
 
+                                if label == 'MCPFirst':
+                                    grade_label = 'MCPFirst'
+                                elif label == 'ProximalPhalanx':
+                                    grade_label = f'PIP{finger}'
+                                elif label == 'DistalPhalanx':
+                                    grade_label = f'DIP{finger}'
+                                elif label == 'MiddlePhalanx':
+                                    grade_label = f'MIP{finger}'
+                                elif label == 'MCP':
+                                    grade_label = f'MCP{finger}'
+                                else:
+                                    grade_label = label
+
                                 joint_data = {
                                     "type": label_cn,
-                                    "label": label,
+                                    "label": grade_label,
+                                    "yolo_label": label,
                                     "finger": finger,
-                                    "finger_cn": finger_cn[finger],
+                                    "finger_cn": finger_cn_map[finger],
                                     "order": joint_index,
                                     "score": round(region.get('confidence', 0.5), 4),
                                     "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
@@ -3135,13 +3169,13 @@ async def joint_grading_predict(
                                     ]
                                 }
 
-                                if label in joints:
+                                if grade_label in joints:
                                     idx = 1
-                                    while f"{label}_{idx}" in joints:
+                                    while f"{grade_label}_{idx}" in joints:
                                         idx += 1
-                                    joint_key = f"{label}_{idx}"
+                                    joint_key = f"{grade_label}_{idx}"
                                 else:
-                                    joint_key = label
+                                    joint_key = grade_label
 
                                 joints[joint_key] = joint_data
                                 ordered_joints.append(joint_data)

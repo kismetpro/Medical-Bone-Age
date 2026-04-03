@@ -293,7 +293,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                                     style={{ maxWidth: '300px' }} 
                                 />
                                 <div className={styles.metaInfo}>
-                                    <p><strong>识别数量：</strong>{result.joint_detect_13.detected_count} / 13</p>
+                                    <p><strong>识别数量：</strong>{result.joint_detect_13.detected_count}/21</p>
                                     <p><strong>判定方位：</strong>{result.joint_detect_13.hand_side === 'left' ? '左手' : '右手'}</p>
                                 </div>
                             </div>
