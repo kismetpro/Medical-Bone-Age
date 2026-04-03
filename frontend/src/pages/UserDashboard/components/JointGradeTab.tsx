@@ -77,6 +77,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
             formData.append('preprocessing_enabled', String(imgSettings.usePreprocessing));
             formData.append('brightness', String(imgSettings.brightness - 100));
             formData.append('contrast', String(imgSettings.contrast));
+            formData.append('use_dpv3', 'true');
 
             const token = localStorage.getItem('boneage_token');
             const headers: Record<string, string> = {};
