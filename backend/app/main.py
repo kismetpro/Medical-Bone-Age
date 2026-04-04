@@ -40,6 +40,27 @@ from app.utils.notification_service import NotificationService
 from app.utils.rus_chn import generate_bone_report, calc_bone_age_from_score
 from dp_bone_detector_v3 import DPV3BoneDetector
 
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.dirname(APP_DIR)
+
+
+def resolve_backend_path(path: str) -> str:
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+
+    candidates = [
+        os.path.abspath(path),
+        os.path.abspath(os.path.join(BACKEND_DIR, path)),
+        os.path.abspath(os.path.join(APP_DIR, path)),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    return candidates[1]
+
 
 # ----------------------------
 # Bone Age Model (与你训练保持一致)
@@ -278,11 +299,10 @@ class JointGrader:
             return {}
 
         nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        #修改了size
-        img_bgr = cv2.resize(img_bgr, (img_size, img_size))
-        if img_bgr is None:
+        img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr_orig is None:
             raise ValueError("Could not decode image for detected-joint grading")
+        img_bgr_resized = cv2.resize(img_bgr_orig, (img_size, img_size))
 
         out: Dict[str, Dict] = {}
         for joint_name, det in detected_joints.items():
@@ -304,7 +324,9 @@ class JointGrader:
                 }
                 continue
 
-            patch = self._safe_crop(img_bgr, bbox)
+            bbox_space = det.get("bbox_space")
+            crop_source = img_bgr_orig if bbox_space == "original" else img_bgr_resized
+            patch = self._safe_crop(crop_source, bbox)
             if patch is None:
                 out[joint_name] = {
                     "model_joint": model_joint,
@@ -459,13 +481,12 @@ class SmallJointRecognizer:
 
     def recognize_13(self, image_bytes: bytes) -> Dict:
         nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img_bgr is None:
+        img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr_orig is None:
             return {"hand_side": "unknown", "detected_count": 0, "joints": {}, "plot_image_base64": None}
 
-        h, w = img_bgr.shape[:2]
-        #调试缩放比例
-        img_bgr = cv2.resize(img_bgr, (self.imgsz, self.imgsz))
+        h, w = img_bgr_orig.shape[:2]
+        img_bgr = cv2.resize(img_bgr_orig, (self.imgsz, self.imgsz))
         result = self.model.predict(
             source=img_bgr,
             imgsz=self.imgsz,
@@ -522,18 +543,25 @@ class SmallJointRecognizer:
         map_finger_logic("DistalPhalanx", "DIP", [0, 2, 4], ["First", "Third", "Fifth"])
 
         joints: Dict[str, Dict] = {}
+        scale_x = w / self.imgsz
+        scale_y = h / self.imgsz
         for name, info in final_13.items():
             b = info["box"]
             x1, y1, x2, y2 = map(float, b.tolist())
+            x1_orig = x1 * scale_x
+            y1_orig = y1 * scale_y
+            x2_orig = x2 * scale_x
+            y2_orig = y2 * scale_y
             joints[name] = {
                 "type": name,
                 "score": round(float(info["score"]), 4),
-                "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                "bbox_xyxy": [round(x1_orig, 2), round(y1_orig, 2), round(x2_orig, 2), round(y2_orig, 2)],
+                "bbox_space": "original",
                 "coord": [
-                    round((x1 + x2) / 2.0 / w, 4),
-                    round((y1 + y2) / 2.0 / h, 4),
-                    round((x2 - x1) / w, 4),
-                    round((y2 - y1) / h, 4),
+                    round((x1_orig + x2_orig) / 2.0 / w, 4),
+                    round((y1_orig + y2_orig) / 2.0 / h, 4),
+                    round((x2_orig - x1_orig) / w, 4),
+                    round((y2_orig - y1_orig) / h, 4),
                 ],
             }
 
@@ -541,7 +569,7 @@ class SmallJointRecognizer:
         if is_left is not None:
             hand_side = "left" if is_left else "right"
 
-        plot_image_base64 = self._render_with_plt(img_bgr, joints, hand_side)
+        plot_image_base64 = self._render_with_plt(img_bgr_orig, joints, hand_side)
         return {
             "hand_side": hand_side,
             "detected_count": len(joints),
@@ -651,6 +679,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[t] = {
                 "grade_raw": int(payload.get("grade_raw", 1)),
                 "score": float(payload.get("score", 0.0)),
+                "status": payload.get("status", "ok"),
                 "source_joint": src_joint,
                 "imputed": False,
             }
@@ -668,6 +697,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[rus_joint] = {
                 "grade_raw": aligned[picked]["grade_raw"],
                 "score": aligned[picked]["score"] * 0.95,
+                "status": "semantic_imputed",
                 "source_joint": aligned[picked]["source_joint"],
                 "imputed": True,
             }
@@ -675,6 +705,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[rus_joint] = {
                 "grade_raw": 1,
                 "score": 0.0,
+                "status": "semantic_default",
                 "source_joint": "none",
                 "imputed": True,
             }
@@ -763,25 +794,268 @@ def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
     return aligned
 
 
+DETECTED_JOINT_FALLBACKS = {
+    "Radius": ["Ulna"],
+    "Ulna": ["Radius"],
+    "MCPFirst": ["MCPSecond", "MCPThird"],
+    "MCPThird": ["MCPSecond", "MCPFourth", "MCPFifth", "MCPFirst"],
+    "MCPFifth": ["MCPFourth", "MCPThird", "MCPSecond"],
+    "PIPFirst": ["PIPSecond", "PIPThird"],
+    "PIPThird": ["PIPSecond", "PIPFourth", "PIPFifth", "PIPFirst"],
+    "PIPFifth": ["PIPFourth", "PIPThird", "PIPSecond"],
+    "MIPThird": ["MIPSecond", "MIPFourth", "MIPFifth"],
+    "MIPFifth": ["MIPFourth", "MIPThird", "MIPSecond"],
+    "DIPFirst": ["DIPSecond", "DIPThird"],
+    "DIPThird": ["DIPSecond", "DIPFourth", "DIPFifth", "DIPFirst"],
+    "DIPFifth": ["DIPFourth", "DIPThird", "DIPSecond"],
+}
+
+FINGER_LABELS_EN = ["First", "Second", "Third", "Fourth", "Fifth"]
+FINGER_LABELS_CN = {
+    "First": "拇指",
+    "Second": "食指",
+    "Third": "中指",
+    "Fourth": "环指",
+    "Fifth": "小指",
+}
+DPV3_PREFIX_RENAME_CONFIG = {
+    "MCP": {
+        "source_labels": {"MCPFirst", "MCP"},
+        "joint_names": ["MCPFirst", "MCPSecond", "MCPThird", "MCPFourth", "MCPFifth"],
+        "expected_count": 5,
+    },
+    "PIP": {
+        "source_labels": {"ProximalPhalanx"},
+        "joint_names": ["PIPFirst", "PIPSecond", "PIPThird", "PIPFourth", "PIPFifth"],
+        "expected_count": 5,
+    },
+    "MIP": {
+        "source_labels": {"MiddlePhalanx"},
+        "joint_names": ["MIPSecond", "MIPThird", "MIPFourth", "MIPFifth"],
+        "expected_count": 4,
+    },
+    "DIP": {
+        "source_labels": {"DistalPhalanx"},
+        "joint_names": ["DIPFirst", "DIPSecond", "DIPThird", "DIPFourth", "DIPFifth"],
+        "expected_count": 5,
+    },
+}
+
+
+def standardize_detected_joints_to_rus(detected_joints: Dict[str, Dict]) -> Dict[str, Dict]:
+    if not detected_joints:
+        return {}
+
+    standardized: Dict[str, Dict] = {}
+    for rus_joint in RUS_13:
+        if rus_joint in detected_joints:
+            standardized[rus_joint] = {
+                **detected_joints[rus_joint],
+                "standard_joint": rus_joint,
+                "source_joint": rus_joint,
+                "imputed": False,
+            }
+            continue
+
+        picked_name = None
+        for candidate in DETECTED_JOINT_FALLBACKS.get(rus_joint, []):
+            if candidate in detected_joints:
+                picked_name = candidate
+                break
+
+        if picked_name is None:
+            continue
+
+        standardized[rus_joint] = {
+            **detected_joints[picked_name],
+            "standard_joint": rus_joint,
+            "source_joint": picked_name,
+            "imputed": True,
+        }
+
+    return standardized
+
+
+def _region_center_x(region: Dict) -> float:
+    centroid = region.get("centroid", (0.0, 0.0))
+    if isinstance(centroid, (list, tuple)) and centroid:
+        return float(centroid[0])
+    return 0.0
+
+
+def _region_center_y(region: Dict) -> float:
+    centroid = region.get("centroid", (0.0, 0.0))
+    if isinstance(centroid, (list, tuple)) and len(centroid) > 1:
+        return float(centroid[1])
+    return 0.0
+
+
+def _region_confidence(region: Dict) -> float:
+    return float(region.get("confidence", 0.0))
+
+
+def _region_bbox(region: Dict) -> Tuple[float, float, float, float]:
+    bbox = region.get("bbox_coords", [0.0, 0.0, 0.0, 0.0])
+    if len(bbox) != 4:
+        return 0.0, 0.0, 0.0, 0.0
+    return tuple(float(v) for v in bbox)
+
+
+def _bbox_iou(box_a: Tuple[float, float, float, float], box_b: Tuple[float, float, float, float]) -> float:
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+    if inter_area <= 0:
+        return 0.0
+
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    denom = area_a + area_b - inter_area
+    if denom <= 0:
+        return 0.0
+    return inter_area / denom
+
+
+def _dedupe_regions_by_overlap(regions: List[Dict], expected_count: int, iou_threshold: float = 0.35) -> List[Dict]:
+    if not regions:
+        return []
+
+    ordered_by_conf = sorted(
+        regions,
+        key=lambda item: (_region_confidence(item), _region_bbox(item)[2] - _region_bbox(item)[0]),
+        reverse=True,
+    )
+
+    kept: List[Dict] = []
+    for region in ordered_by_conf:
+        region_box = _region_bbox(region)
+        if any(_bbox_iou(region_box, _region_bbox(existing)) >= iou_threshold for existing in kept):
+            continue
+        kept.append(region)
+
+    if len(kept) > expected_count:
+        kept = kept[:expected_count]
+
+    return kept
+
+
+def _order_regions_by_hand_side(regions: List[Dict], hand_side: str) -> List[Dict]:
+    ordered = sorted(regions, key=_region_center_x)
+    if hand_side == "left":
+        ordered.reverse()
+    return ordered
+
+
+def _joint_name_to_finger(joint_name: str) -> str:
+    for finger in FINGER_LABELS_EN:
+        if joint_name.endswith(finger):
+            return finger
+    return "Wrist"
+
+
+def _build_named_joint_payload(region: Dict, joint_name: str, image_shape: Tuple[int, int], order: int) -> Dict:
+    img_h, img_w = image_shape
+    label = region.get("label", "Unknown")
+    label_cn = region.get("label_cn", label)
+    x1, y1, x2, y2 = _region_bbox(region)
+    finger = _joint_name_to_finger(joint_name)
+    finger_cn = FINGER_LABELS_CN.get(finger, "腕骨")
+
+    return {
+        "type": label_cn,
+        "label": joint_name,
+        "yolo_label": label,
+        "finger": finger,
+        "finger_cn": finger_cn,
+        "order": order,
+        "score": round(_region_confidence(region), 4),
+        "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+        "bbox_space": "original",
+        "source": region.get("source", "unknown"),
+        "coord": [
+            round(_region_center_x(region) / img_w, 4) if img_w else 0.0,
+            round(_region_center_y(region) / img_h, 4) if img_h else 0.0,
+            round((x2 - x1) / img_w, 4) if img_w else 0.0,
+            round((y2 - y1) / img_h, 4) if img_h else 0.0,
+        ],
+    }
+
+
+def _resolve_hand_side_from_regions(regions: List[Dict], fallback: str = "unknown") -> str:
+    radius_regions = [region for region in regions if region.get("label") == "Radius"]
+    ulna_regions = [region for region in regions if region.get("label") == "Ulna"]
+    if radius_regions and ulna_regions:
+        radius_region = max(radius_regions, key=_region_confidence)
+        ulna_region = max(ulna_regions, key=_region_confidence)
+        return "left" if _region_center_x(radius_region) > _region_center_x(ulna_region) else "right"
+    return fallback if fallback in {"left", "right"} else "unknown"
+
+
+def rename_dpv3_regions_to_named_joints(
+    regions: List[Dict],
+    image_shape: Tuple[int, int],
+    hand_side_hint: str = "unknown",
+) -> Tuple[Dict[str, Dict], List[Dict], str]:
+    img_h, img_w = image_shape
+    hand_side = _resolve_hand_side_from_regions(regions, hand_side_hint)
+    joints: Dict[str, Dict] = {}
+    ordered_joints: List[Dict] = []
+    joint_index = 0
+
+    for wrist_label in ["Radius", "Ulna"]:
+        wrist_regions = [region for region in regions if region.get("label") == wrist_label]
+        if not wrist_regions:
+            continue
+        wrist_region = max(wrist_regions, key=_region_confidence)
+        payload = _build_named_joint_payload(wrist_region, wrist_label, (img_h, img_w), joint_index)
+        joints[wrist_label] = payload
+        ordered_joints.append(payload)
+        joint_index += 1
+
+    for prefix, config in DPV3_PREFIX_RENAME_CONFIG.items():
+        prefix_regions = [region for region in regions if region.get("label") in config["source_labels"]]
+        if not prefix_regions:
+            continue
+
+        deduped_regions = _dedupe_regions_by_overlap(prefix_regions, config["expected_count"])
+        ordered_regions = _order_regions_by_hand_side(deduped_regions, hand_side)
+
+        for joint_name, region in zip(config["joint_names"], ordered_regions[:len(config["joint_names"])]):
+            payload = _build_named_joint_payload(region, joint_name, (img_h, img_w), joint_index)
+            joints[joint_name] = payload
+            ordered_joints.append(payload)
+            joint_index += 1
+
+    return joints, ordered_joints, hand_side
+
+
 # ----------------------------
 # Config
 # ----------------------------
 FOLD_MODEL_PATHS = [
-    "app/models/model_fold_0.pth",
-    "app/models/model_fold_1.pth",
-    "app/models/model_fold_2.pth",
-    "app/models/model_fold_3.pth",
-    "app/models/model_fold_4.pth",
+    resolve_backend_path("app/models/model_fold_0.pth"),
+    resolve_backend_path("app/models/model_fold_1.pth"),
+    resolve_backend_path("app/models/model_fold_2.pth"),
+    resolve_backend_path("app/models/model_fold_3.pth"),
+    resolve_backend_path("app/models/model_fold_4.pth"),
 ]
 EXTRA_FOLD_CANDIDATES = [
-    "app/models/model_fold_0 (1).pth",
-    "app/models/model_fold_1 (1).pth",
-    "app/models/model_fold_2 (1).pth",
-    "app/models/model_fold_3 (1).pth",
-    "app/models/model_fold_4 (1).pth",
+    resolve_backend_path("app/models/model_fold_0 (1).pth"),
+    resolve_backend_path("app/models/model_fold_1 (1).pth"),
+    resolve_backend_path("app/models/model_fold_2 (1).pth"),
+    resolve_backend_path("app/models/model_fold_3 (1).pth"),
+    resolve_backend_path("app/models/model_fold_4 (1).pth"),
 ]
 
-JOINT_MODEL_DIR = os.getenv("JOINT_MODEL_DIR", "app/models/joints")
+JOINT_MODEL_DIR = resolve_backend_path(os.getenv("JOINT_MODEL_DIR", "app/models/joints"))
 JOINT_NAMES = ["DIP", "DIPFirst", "PIP", "PIPFirst", "MCP", "MCPFirst", "MIP", "Radius", "Ulna"]
 
 DEFAULT_AGE_MIN = 1.0
@@ -792,11 +1066,15 @@ JOINT_IMG_SIZE = 1024
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-FRACTURE_MODEL_PATH = os.getenv(
-    "FRACTURE_MODEL_PATH",
-    "app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx",
+FRACTURE_MODEL_PATH = resolve_backend_path(
+    os.getenv(
+        "FRACTURE_MODEL_PATH",
+        "app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx",
+    )
 )
-JOINT_RECOGNIZE_MODEL_PATH = os.getenv("JOINT_RECOGNIZE_MODEL_PATH", "app/models/recognize/best.pt")
+JOINT_RECOGNIZE_MODEL_PATH = resolve_backend_path(
+    os.getenv("JOINT_RECOGNIZE_MODEL_PATH", "app/models/recognize/best.pt")
+)
 AUTH_DB_PATH = os.getenv("AUTH_DB_PATH", "app/data/auth.db")
 PREDICTION_DB_PATH = os.getenv("PREDICTION_DB_PATH", "app/data/predictions.db")
 AUTH_TOKEN_EXPIRE_HOURS = int(os.getenv("AUTH_TOKEN_EXPIRE_HOURS", "24"))
@@ -2396,6 +2674,10 @@ async def predict_bone_age(
             joint_semantic_13 = align_joint_semantics(joint_grades)
             joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
 
+        recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
+            recognized_joints_13.get("joints", {})
+        )
+
         # 决定是否使用预处理参数
         if preprocessing_enabled:
             img_tensor = preprocess_image(content, brightness=brightness, contrast=contrast).to(device)
@@ -3019,8 +3301,6 @@ async def joint_grading_predict(
                 processed_content = content
         else:
             processed_content = content
-        with open("check_this_image.jpg", "wb") as f:
-            f.write(processed_content)
 
         recognized_joints_13 = {
             "hand_side": "unknown",
@@ -3068,165 +3348,20 @@ async def joint_grading_predict(
                             "merged_blocks": dpv3_results.get('merged_blocks')
                         }
 
-                        finger_labels_en = ['First', 'Second', 'Third', 'Fourth', 'Fifth']
-                        finger_labels_cn = ['拇指', '食指', '中指', '环指', '小指']
-
-                        if hand_side == 'left':
-                            finger_order = finger_labels_en
-                        else:
-                            finger_order = list(reversed(finger_labels_en))
-
-                        finger_regions_map = {f: [] for f in finger_labels_en}
-                        finger_cn_map = dict(zip(finger_labels_en, finger_labels_cn))
-                        carpal_regions = []
-
-                        thumb_regions = []
-                        other_regions = []
-
-                        for region in dpv3_results.get('regions', []):
-                            label = region.get('label', 'Unknown')
-                            if label in ['Radius', 'Ulna']:
-                                carpal_regions.append(region)
-                            elif label == 'MCPFirst':
-                                thumb_regions.append(region)
-                            elif label in ['ProximalPhalanx', 'MCP', 'MiddlePhalanx', 'DistalPhalanx']:
-                                other_regions.append(region)
-
-                        if not thumb_regions and other_regions:
-                            img_width = img_bgr.shape[1]
-                            thumb_threshold = img_width * 0.85 if hand_side == 'left' else img_width * 0.15
-                            if hand_side == 'left':
-                                thumb_regions = [r for r in other_regions if r.get('centroid', (0, 0))[0] > thumb_threshold]
-                            else:
-                                thumb_regions = [r for r in other_regions if r.get('centroid', (0, 0))[0] < thumb_threshold]
-                            other_regions = [r for r in other_regions if r not in thumb_regions]
-
-                        finger_regions_map['First'].extend(thumb_regions)
-
-                        if other_regions:
-                            sorted_by_x = sorted(other_regions, key=lambda r: r.get('centroid', (0, 0))[0])
-
-                            if hand_side == 'left':
-                                sorted_by_x.reverse()
-
-                            step = len(sorted_by_x) / 4
-                            other_finger_labels = ['Second', 'Third', 'Fourth', 'Fifth']
-                            for i, finger in enumerate(other_finger_labels):
-                                start_idx = int(i * step)
-                                end_idx = int((i + 1) * step) if i < 3 else len(sorted_by_x)
-                                finger_regions_map[finger].extend(sorted_by_x[start_idx:end_idx])
-
-                        joints = {}
-                        ordered_joints = []
-                        joint_index = 0
-
-                        label_counter = {f: {} for f in finger_order}
-
-                        for finger in finger_order:
-                            finger_regions = finger_regions_map[finger]
-                            if not finger_regions:
-                                continue
-
-                            sorted_regions = sorted(
-                                finger_regions,
-                                key=lambda r: (r.get('centroid', (0, 0))[1], r.get('centroid', (0, 0))[0])
-                            )
-
-                            for region in sorted_regions:
-                                label = region.get('label', 'Unknown')
-                                label_cn = region.get('label_cn', label)
-                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-                                x1, y1, x2, y2 = bbox_coords
-
-                                if label == 'MCPFirst':
-                                    grade_label = 'MCPFirst'
-                                elif label == 'ProximalPhalanx':
-                                    grade_label = f'PIP{finger}'
-                                elif label == 'DistalPhalanx':
-                                    grade_label = f'DIP{finger}'
-                                elif label == 'MiddlePhalanx':
-                                    grade_label = f'MIP{finger}'
-                                elif label == 'MCP':
-                                    grade_label = f'MCP{finger}'
-                                else:
-                                    grade_label = label
-
-                                joint_data = {
-                                    "type": label_cn,
-                                    "label": grade_label,
-                                    "yolo_label": label,
-                                    "finger": finger,
-                                    "finger_cn": finger_cn_map[finger],
-                                    "order": joint_index,
-                                    "score": round(region.get('confidence', 0.5), 4),
-                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
-                                    "source": region.get('source', 'unknown'),
-                                    "coord": [
-                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
-                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
-                                        round((x2 - x1) / img_bgr.shape[1], 4),
-                                        round((y2 - y1) / img_bgr.shape[0], 4)
-                                    ]
-                                }
-
-                                if grade_label in joints:
-                                    idx = 1
-                                    while f"{grade_label}_{idx}" in joints:
-                                        idx += 1
-                                    joint_key = f"{grade_label}_{idx}"
-                                else:
-                                    joint_key = grade_label
-
-                                joints[joint_key] = joint_data
-                                ordered_joints.append(joint_data)
-                                joint_index += 1
-
-                        if carpal_regions:
-                            sorted_carpal = sorted(
-                                carpal_regions,
-                                key=lambda r: r.get('centroid', (0, 0))[1]
-                            )
-
-                            for region in sorted_carpal:
-                                label = region.get('label', 'Unknown')
-                                label_cn = region.get('label_cn', label)
-                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-                                x1, y1, x2, y2 = bbox_coords
-
-                                joint_data = {
-                                    "type": label_cn,
-                                    "label": label,
-                                    "finger": 'Wrist',
-                                    "finger_cn": '腕骨',
-                                    "order": joint_index,
-                                    "score": round(region.get('confidence', 0.5), 4),
-                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
-                                    "source": region.get('source', 'unknown'),
-                                    "coord": [
-                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
-                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
-                                        round((x2 - x1) / img_bgr.shape[1], 4),
-                                        round((y2 - y1) / img_bgr.shape[0], 4)
-                                    ]
-                                }
-
-                                if label in joints:
-                                    idx = 1
-                                    while f"{label}_{idx}" in joints:
-                                        idx += 1
-                                    joint_key = f"{label}_{idx}"
-                                else:
-                                    joint_key = label
-
-                                joints[joint_key] = joint_data
-                                ordered_joints.append(joint_data)
-                                joint_index += 1
+                        joints, ordered_joints, hand_side = rename_dpv3_regions_to_named_joints(
+                            dpv3_results.get('regions', []),
+                            img_bgr.shape[:2],
+                            hand_side,
+                        )
 
                         recognized_joints_13["detected_count"] = len(joints)
                         recognized_joints_13["hand_side"] = hand_side
                         recognized_joints_13["joints"] = joints
                         recognized_joints_13["ordered_joints"] = ordered_joints
-                        recognized_joints_13["finger_order"] = finger_order
+                        recognized_joints_13["finger_order"] = (
+                            FINGER_LABELS_EN if hand_side == 'left' else list(reversed(FINGER_LABELS_EN))
+                        )
+                        recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(joints)
                         print(f"✅ DP V3 enhanced detection: {recognized_joints_13['detected_count']} bones detected")
             except Exception as dpv3_exc:
                 print(f"DP V3 detection failed: {dpv3_exc}")
@@ -3267,33 +3402,17 @@ async def joint_grading_predict(
             if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
                 joint_rus_total_score = 0.0
 
+        recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
+            recognized_joints_13.get("joints", {})
+        )
+
         if joint_recognizer and joint_grades:
             try:
                 nparr = np.frombuffer(processed_content, np.uint8)
                 img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                orig_h, orig_w = img_bgr_orig.shape[:2]
-
-                img_bgr = cv2.resize(img_bgr_orig, (joint_recognizer.imgsz, joint_recognizer.imgsz))
-                scale_x = joint_recognizer.imgsz / orig_w
-                scale_y = joint_recognizer.imgsz / orig_h
-
-                scaled_joints = {}
-                for joint_key, joint_data in recognized_joints_13.get("joints", {}).items():
-                    bbox = joint_data.get("bbox_xyxy", [0, 0, 0, 0])
-                    x1, y1, x2, y2 = bbox
-                    scaled_joints[joint_key] = {
-                        **joint_data,
-                        "bbox_xyxy": [
-                            x1 * scale_x,
-                            y1 * scale_y,
-                            x2 * scale_x,
-                            y2 * scale_y
-                        ]
-                    }
-
                 new_plot = joint_recognizer._render_with_plt(
-                    img_bgr,
-                    scaled_joints,
+                    img_bgr_orig,
+                    recognized_joints_13.get("joints", {}),
                     recognized_joints_13.get("hand_side", "unknown"),
                     grades=joint_grades
                 )
@@ -3371,25 +3490,14 @@ async def joint_dpv3_detect(
         dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
 
         detected_joints = {}
+        ordered_joints = []
+        resolved_hand_side = dpv3_results.get('hand_side', 'unknown')
         if dpv3_results.get('success'):
-            h, w = img_bgr.shape[:2]
-            for region in dpv3_results.get('regions', []):
-                label = region.get('label', 'Unknown')
-                label_cn = region.get('label_cn', label)
-                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-
-                detected_joints[label_cn] = {
-                    "type": label_cn,
-                    "score": region.get('confidence', 0.5),
-                    "bbox_xyxy": list(bbox_coords),
-                    "source": region.get('source', 'unknown'),
-                    "coord": [
-                        region['centroid'][0] / w,
-                        region['centroid'][1] / h,
-                        (bbox_coords[2] - bbox_coords[0]) / w,
-                        (bbox_coords[3] - bbox_coords[1]) / h
-                    ]
-                }
+            detected_joints, ordered_joints, resolved_hand_side = rename_dpv3_regions_to_named_joints(
+                dpv3_results.get('regions', []),
+                img_bgr.shape[:2],
+                resolved_hand_side,
+            )
 
         joint_grades = {}
         try:
@@ -3417,11 +3525,10 @@ async def joint_dpv3_detect(
         plot_image_base64 = None
         if joint_recognizer and detected_joints:
             try:
-                img_resized = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
                 plot_image_base64 = joint_recognizer._render_with_plt(
-                    img_resized,
+                    img_bgr,
                     detected_joints,
-                    dpv3_results.get('hand_side', 'unknown'),
+                    resolved_hand_side,
                     grades=joint_grades
                 )
             except Exception as plot_exc:
@@ -3432,9 +3539,11 @@ async def joint_dpv3_detect(
             "filename": file.filename,
             "gender": gender_lower,
             "joint_detect_13": {
-                "hand_side": dpv3_results.get('hand_side', 'unknown'),
+                "hand_side": resolved_hand_side,
                 "detected_count": len(detected_joints),
                 "joints": detected_joints,
+                "ordered_joints": ordered_joints,
+                "rus_13_joints": standardize_detected_joints_to_rus(detected_joints),
                 "plot_image_base64": plot_image_base64,
                 "dpv3_enhanced": True,
                 "dpv3_info": {

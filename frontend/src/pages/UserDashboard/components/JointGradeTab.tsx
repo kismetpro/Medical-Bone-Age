@@ -15,6 +15,43 @@ interface JointGradeTabProps {
     setResult?: (result: PredictionResult | null) => void;
 }
 
+const RUS_13_ORDER = [
+    'Radius',
+    'Ulna',
+    'MCPFirst',
+    'MCPThird',
+    'MCPFifth',
+    'PIPFirst',
+    'PIPThird',
+    'PIPFifth',
+    'MIPThird',
+    'MIPFifth',
+    'DIPFirst',
+    'DIPThird',
+    'DIPFifth',
+];
+
+const NON_RECOGNIZED_STATUSES = new Set([
+    'missing',
+    'pending',
+    'crop_invalid',
+    'model_missing',
+    'semantic_default',
+    'error',
+]);
+
+const hasUsableGrade = (joint: { grade_raw?: number; status?: string } | undefined) => {
+    if (!joint) return false;
+    if (joint.grade_raw === undefined || joint.grade_raw === null) return false;
+    return !NON_RECOGNIZED_STATUSES.has(joint.status ?? 'ok');
+};
+
+const isPendingJoint = (joint: { grade_raw?: number; status?: string } | undefined) => {
+    if (!joint) return true;
+    if (NON_RECOGNIZED_STATUSES.has(joint.status ?? 'ok')) return true;
+    return joint.grade_raw === undefined || joint.grade_raw === null;
+};
+
 const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
     // --- 1. 核心状态管理 ---
     const [loading, setLoading] = useState(false);
@@ -109,10 +146,18 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
     };
 
     // --- 4. 数据转换逻辑 (用于图表和表格) ---
+    const displayJointGrades = useMemo(() => {
+        const source = result?.joint_semantic_13 ?? result?.joint_grades;
+        if (!source) return [];
+
+        return RUS_13_ORDER
+            .filter((jointName) => source[jointName])
+            .map((jointName) => [jointName, source[jointName]] as const);
+    }, [result]);
+
     const chartData = useMemo(() => {
-        if (!result?.joint_grades) return [];
-        return Object.entries(result.joint_grades)
-            .filter(([_, g]) => g.status === 'ok' && g.grade_raw !== undefined)
+        return displayJointGrades
+            .filter(([_, g]) => hasUsableGrade(g))
             .map(([name, g]) => {
                 let color = '#22c55e'; // 默认绿色
                 if (g.grade_raw! > 10) color = '#ef4444';
@@ -127,14 +172,13 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                 };
             })
             .sort((a, b) => b.grade - a.grade);
-    }, [result]);
+    }, [displayJointGrades]);
 
     const pendingJoints = useMemo(() => {
-        if (!result?.joint_grades) return [];
-        return Object.entries(result.joint_grades)
-            .filter(([_, g]) => g.status !== 'ok')
+        return displayJointGrades
+            .filter(([_, g]) => isPendingJoint(g))
             .map(([name]) => name);
-    }, [result]);
+    }, [displayJointGrades]);
 
     const recognizedRows = useMemo(() => {
         return chartData.map(item => ({

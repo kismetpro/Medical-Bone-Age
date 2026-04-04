@@ -39,6 +39,15 @@ const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
                     <Users size={18} /> 患者记录
                 </button>
                 <button 
+                    className={`${styles.navItem} ${activeTab === 'predict' ? styles.active : ''}`} 
+                    onClick={() => {
+                        if (setActiveTab) setActiveTab('predict');
+                        if (!isDashboard) navigate('/doctor-dashboard');
+                    }}
+                >
+                    <Activity size={18} /> 骨龄预测
+                </button>
+                <button 
                     className={`${styles.navItem} ${activeTab === 'preprocessing' ? styles.active : ''}`} 
                     onClick={() => {
                         if (setActiveTab) setActiveTab('preprocessing');
