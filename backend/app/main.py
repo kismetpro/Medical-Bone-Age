@@ -22,6 +22,8 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms.functional as TF
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
