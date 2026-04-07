@@ -1,6 +1,22 @@
 import { AuthCookie } from './cookieManager';
 import { API_BASE } from '../config';
 
+const RUS_13_ORDER = [
+    'Radius',
+    'Ulna',
+    'MCPFirst',
+    'MCPThird',
+    'MCPFifth',
+    'PIPFirst',
+    'PIPThird',
+    'PIPFifth',
+    'MIPThird',
+    'MIPFifth',
+    'DIPFirst',
+    'DIPThird',
+    'DIPFifth',
+];
+
 /**
  * 构建认证头
  */
@@ -67,6 +83,7 @@ export const detectJoints = async (
     formData.append('preprocessing_enabled', String(usePreprocessing));
     formData.append('brightness', String(brightness));
     formData.append('contrast', String(contrast));
+    formData.append('use_dpv3', 'true');
 
     const response = await fetch(`${API_BASE}/joint-grading`, {
         method: 'POST',
@@ -80,18 +97,34 @@ export const detectJoints = async (
 
     const data = await response.json();
     
-    const jointsData = data.joint_detect_13?.joints;
-    const jointsArray = jointsData && typeof jointsData === 'object' ? Object.entries(jointsData) : [];
+    const jointsData = data.joint_detect_13?.rus_13_joints ?? data.joint_detect_13?.joints;
+    const jointsEntries = jointsData && typeof jointsData === 'object' ? Object.entries(jointsData) : [];
+    const entryMap = new Map(jointsEntries as Array<[string, any]>);
+    const orderedEntries = [
+        ...RUS_13_ORDER.filter((jointId) => entryMap.has(jointId)).map((jointId) => [jointId, entryMap.get(jointId)]),
+        ...jointsEntries.filter(([jointId]) => !RUS_13_ORDER.includes(jointId)),
+    ] as Array<[string, any]>;
     
     return {
-        joints: jointsArray.map(([id, joint]: [string, any]) => ({
-            id,
-            name: id,
-            bbox: joint.bbox_xyxy || joint.bbox,
-            grade: data.joint_grades?.[id]?.grade_raw,
-            score: joint.score || 1.0,
-            status: 'ok'
-        })),
+        joints: orderedEntries.map(([id, joint]: [string, any]) => {
+            // Some backend payloads only provide grade_raw/score and omit status.
+            // In that case, treat the joint as usable instead of forcing it into pending.
+            const semanticJoint = data.joint_semantic_13?.[id];
+            const gradedJoint = data.joint_grades?.[id];
+            const resolvedStatus =
+                semanticJoint?.status ??
+                gradedJoint?.status ??
+                ((semanticJoint?.grade_raw ?? gradedJoint?.grade_raw) !== undefined ? 'ok' : 'pending');
+
+            return {
+                id,
+                name: id,
+                bbox: joint.bbox_xyxy || joint.bbox,
+                grade: semanticJoint?.grade_raw ?? gradedJoint?.grade_raw,
+                score: joint.score || 1.0,
+                status: resolvedStatus,
+            };
+        }),
         plot_image_base64: data.joint_detect_13?.plot_image_base64,
         joint_grades: data.joint_grades,
         joint_semantic_13: data.joint_semantic_13,

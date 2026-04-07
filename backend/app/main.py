@@ -22,6 +22,8 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms.functional as TF
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +40,7 @@ from app.utils.foreign_object_detection import (
 from app.utils.growth_standards import predict_adult_height
 from app.utils.notification_service import NotificationService
 from app.utils.rus_chn import generate_bone_report, calc_bone_age_from_score
+from dp_bone_detector_v3 import DPV3BoneDetector
 
 
 # ----------------------------
@@ -141,7 +144,9 @@ class JointGrader:
             "PIPThird": "PIP",
             "PIPFifth": "PIP",
             "MCPFirst": "MCPFirst",
+            "MCPSecond": "MCP",
             "MCPThird": "MCP",
+            "MCPFourth": "MCP",
             "MCPFifth": "MCP",
             "MIPThird": "MIP",
             "MIPFifth": "MIP",
@@ -243,7 +248,8 @@ class JointGrader:
             return {}
 
         x = self.preprocess(image_bytes, img_size, mean, std)
-        x = torch.nn.functional.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
+        # x =  image_bytes
+        x = cv2.resize(x, (1024, 1024))
         out = {}
 
         for joint, item in self.models.items():
@@ -261,7 +267,7 @@ class JointGrader:
 
         return out
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def predict_detected_joints(
         self,
         image_bytes: bytes,
@@ -361,7 +367,7 @@ class FractureDetector:
             return [], None
 
         img_640 = cv2.resize(img_orig, (640, 640), interpolation=cv2.INTER_LINEAR)
-        ok, buf = cv2.imencode(".jpg", img_640, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        ok, buf = cv2.imencode(".jpg", img_640)
         detection_image_base64 = None
         if ok:
             detection_image_base64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
@@ -403,8 +409,8 @@ class SmallJointRecognizer:
         self.conf = conf
 
     def _render_with_plt(self, img_bgr: np.ndarray, joints: Dict[str, Dict], hand_side: str, grades: Dict[str, Dict] = None) -> Optional[str]:
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
-        fig, ax = plt.subplots(figsize=(6, 8), dpi=80)
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        fig, ax = plt.subplots(figsize=(8, 10), dpi=120)
         ax.imshow(img_rgb)
 
         for name, payload in joints.items():
@@ -419,8 +425,10 @@ class SmallJointRecognizer:
             )
             ax.add_patch(rect)
             
+            # 基础标签：名称 + 置信度
             label = f"{name} {payload['score']:.2f}"
             
+            # 如果提供了分级信息，则在标签中加入分级
             if grades and name in grades:
                 grade = grades[name].get('grade_raw')
                 if grade is not None:
@@ -445,7 +453,7 @@ class SmallJointRecognizer:
         plt.close(fig)
 
         plot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        ok, buf = cv2.imencode(".jpg", plot_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        ok, buf = cv2.imencode(".jpg", plot_bgr)
         if not ok:
             return None
 
@@ -464,7 +472,7 @@ class SmallJointRecognizer:
             source=img_bgr,
             imgsz=self.imgsz,
             conf=self.conf,
-            verbose=False,
+            verbose=True,
         )[0]
 
         all_d = []
@@ -591,6 +599,22 @@ FALLBACKS = {
     "DIPFifth": ["DIPThird", "DIPFirst"],
 }
 
+DETECTED_JOINT_FALLBACKS = {
+    "Radius": ["Ulna"],
+    "Ulna": ["Radius"],
+    "MCPFirst": ["MCPSecond", "MCPThird"],
+    "MCPThird": ["MCPSecond", "MCPFourth", "MCPFifth", "MCPFirst"],
+    "MCPFifth": ["MCPFourth", "MCPThird", "MCPSecond"],
+    "PIPFirst": ["PIPSecond", "PIPThird"],
+    "PIPThird": ["PIPSecond", "PIPFourth", "PIPFifth", "PIPFirst"],
+    "PIPFifth": ["PIPFourth", "PIPThird", "PIPSecond"],
+    "MIPThird": ["MIPSecond", "MIPFourth", "MIPFifth"],
+    "MIPFifth": ["MIPFourth", "MIPThird", "MIPSecond"],
+    "DIPFirst": ["DIPSecond", "DIPThird"],
+    "DIPThird": ["DIPSecond", "DIPFourth", "DIPFifth", "DIPFirst"],
+    "DIPFifth": ["DIPFourth", "DIPThird", "DIPSecond"],
+}
+
 SCORE_TABLE = {
     "female": {
         "Radius": [0, 10, 15, 22, 25, 40, 59, 91, 125, 138, 178, 192, 199, 203, 210],
@@ -703,72 +727,37 @@ def calc_rus_score(aligned_13: Dict, gender: str):
     return total_score, details
 
 
-def _is_valid_grade(grade_raw) -> bool:
-    if grade_raw is None:
-        return False
-    try:
-        g = float(grade_raw)
-        return not (math.isnan(g) or math.isinf(g))
-    except (TypeError, ValueError):
-        return False
-
-
-def _compute_similar_joint_average(joint_grades: Dict, fallbacks: List[str]) -> Tuple[Optional[int], float]:
-    valid_grades = []
-    for cand in fallbacks:
-        c = joint_grades.get(cand)
-        if c and _is_valid_grade(c.get("grade_raw")):
-            valid_grades.append((int(c.get("grade_raw", 1)), float(c.get("score", 0.0))))
-    if not valid_grades:
-        return None, 0.0
-    avg_grade = sum(g for g, s in valid_grades) / len(valid_grades)
-    avg_score = sum(s for g, s in valid_grades) / len(valid_grades)
-    return int(round(avg_grade)), avg_score
-
-
 def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
     """
     对没有对应模型或裁剪失败的关节做语义补全。
     规则:
-    - 仅补全 grade_raw 为空或NaN的关节
-    - 使用 FALLBACKS 中的候选关节计算平均值
+    - 仅补全 grade_raw 为空的关节
+    - 使用 FALLBACKS 中的候选关节
     - 置信度做轻微折减，并标记 imputed
     """
     if not joint_grades:
         return {}
 
-    aligned = {}
+    aligned = dict(joint_grades)
     for joint in RUS_13:
-        payload = joint_grades.get(joint, {})
-        grade_raw = payload.get("grade_raw") if isinstance(payload, dict) else None
-
-        if _is_valid_grade(grade_raw):
-            aligned[joint] = {
-                "model_joint": payload.get("model_joint") if isinstance(payload, dict) else None,
-                "grade_idx": payload.get("grade_idx") if isinstance(payload, dict) else None,
-                "grade_raw": int(grade_raw),
-                "score": float(payload.get("score", 0.0)) if isinstance(payload, dict) else 0.0,
-                "status": "ok",
-                "imputed": False,
-                "source_joint": joint,
-            }
+        payload = aligned.get(joint)
+        if payload and payload.get("grade_raw", None) is not None:
+            payload["imputed"] = False
+            aligned[joint] = payload
             continue
 
-        avg_grade, avg_score = _compute_similar_joint_average(joint_grades, FALLBACKS.get(joint, []))
+        picked = None
+        for cand in FALLBACKS.get(joint, []):
+            c = aligned.get(cand)
+            if c and c.get("grade_raw", None) is not None:
+                picked = c
+                picked_name = cand
+                break
 
-        if avg_grade is not None:
+        if picked is None:
+            base = payload if isinstance(payload, dict) else {}
             aligned[joint] = {
-                "model_joint": None,
-                "grade_idx": None,
-                "grade_raw": avg_grade,
-                "score": round(avg_score * 0.95, 4),
-                "status": "semantic_imputed",
-                "imputed": True,
-                "source_joint": FALLBACKS.get(joint, [joint])[0] if FALLBACKS.get(joint) else "none",
-            }
-        else:
-            aligned[joint] = {
-                "model_joint": None,
+                "model_joint": base.get("model_joint", None),
                 "grade_idx": None,
                 "grade_raw": 1,
                 "score": 0.0,
@@ -776,8 +765,59 @@ def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
                 "imputed": True,
                 "source_joint": "none",
             }
+            continue
+
+        base_score = float(picked.get("score", 0.0))
+        aligned[joint] = {
+            "model_joint": picked.get("model_joint", None),
+            "grade_idx": picked.get("grade_idx", None),
+            "grade_raw": int(picked.get("grade_raw", 1)),
+            "score": round(base_score * 0.95, 4),
+            "status": "semantic_imputed",
+            "imputed": True,
+            "source_joint": picked_name,
+        }
 
     return aligned
+
+
+def standardize_detected_joints_to_rus(detected_joints: Dict[str, Dict]) -> Dict[str, Dict]:
+    """
+    将 21 点检测结果收敛为 RUS-13 标准关节视图。
+    - 优先使用同名关节
+    - 若标准关节缺失，则从 Second/Fourth 或相邻同类关节中回退
+    """
+    if not detected_joints:
+        return {}
+
+    standardized: Dict[str, Dict] = {}
+    for rus_joint in RUS_13:
+        if rus_joint in detected_joints:
+            standardized[rus_joint] = {
+                **detected_joints[rus_joint],
+                "standard_joint": rus_joint,
+                "source_joint": rus_joint,
+                "imputed": False,
+            }
+            continue
+
+        picked_name = None
+        for candidate in DETECTED_JOINT_FALLBACKS.get(rus_joint, []):
+            if candidate in detected_joints:
+                picked_name = candidate
+                break
+
+        if picked_name is None:
+            continue
+
+        standardized[rus_joint] = {
+            **detected_joints[picked_name],
+            "standard_joint": rus_joint,
+            "source_joint": picked_name,
+            "imputed": True,
+        }
+
+    return standardized
 
 
 # ----------------------------
@@ -871,6 +911,7 @@ models_ensemble: List[Dict] = []
 fracture_detector: Optional[FractureDetector] = None
 joint_grader: Optional[JointGrader] = None
 joint_recognizer: Optional[SmallJointRecognizer] = None
+dpv3_detector: Optional[DPV3BoneDetector] = None
 
 
 # ----------------------------
@@ -922,7 +963,7 @@ def list_existing_fold_paths():
 # ----------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global models_ensemble, fracture_detector, joint_grader, joint_recognizer
+    global models_ensemble, fracture_detector, joint_grader, joint_recognizer, dpv3_detector
 
     init_auth_db()
     init_prediction_db()
@@ -972,12 +1013,20 @@ async def lifespan(app: FastAPI):
     else:
         print(f"WARNING: Joint recognize model not found: {JOINT_RECOGNIZE_MODEL_PATH}")
 
+    dpv3_detector = None
+    try:
+        dpv3_detector = DPV3BoneDetector(conf=0.5, imgsz=1024)
+        print(f"✅ DP V3 bone detector loaded successfully")
+    except Exception as exc:
+        print(f"Failed to load DP V3 detector: {exc}")
+
     yield
 
     models_ensemble = []
     fracture_detector = None
     joint_grader = None
     joint_recognizer = None
+    dpv3_detector = None
 
 
 app = FastAPI(title="Bone Age Assessment API", lifespan=lifespan)
@@ -1567,29 +1616,25 @@ def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: floa
     return torch.from_numpy(img).float()
 
 
-def predict_with_ensemble_tta_months(img_tensor: torch.Tensor, gender_tensor: torch.Tensor, use_tta: bool = False, single_fold: bool = False):
+def predict_with_ensemble_tta_months(img_tensor: torch.Tensor, gender_tensor: torch.Tensor):
     if not models_ensemble:
         raise RuntimeError("No age model loaded")
 
-    with torch.inference_mode():
-        models_to_use = [models_ensemble[0]] if single_fold and len(models_ensemble) > 0 else models_ensemble
-        
+    with torch.no_grad():
+        img_r1 = TF.rotate(img_tensor, -5)
+        img_r2 = TF.rotate(img_tensor, 5)
+
         fold_months = []
-        for item in models_to_use:
+        for item in models_ensemble:
             m = item["model"]
             age_min = item["age_min"]
             age_max = item["age_max"]
 
-            if use_tta:
-                img_r1 = TF.rotate(img_tensor, -5)
-                img_r2 = TF.rotate(img_tensor, 5)
-                s1 = m(img_tensor, gender_tensor).item()
-                s2 = m(img_r1, gender_tensor).item()
-                s3 = m(img_r2, gender_tensor).item()
-                fold_norm = (s1 + s2 + s3) / 3.0
-            else:
-                fold_norm = m(img_tensor, gender_tensor).item()
+            s1 = m(img_tensor, gender_tensor).item()
+            s2 = m(img_r1, gender_tensor).item()
+            s3 = m(img_r2, gender_tensor).item()
 
+            fold_norm = (s1 + s2 + s3) / 3.0
             fold_month = fold_norm * (age_max - age_min) + age_min
             fold_months.append(fold_month)
 
@@ -1608,14 +1653,13 @@ def build_gradcam_heatmap(img_tensor: torch.Tensor, gender_tensor: torch.Tensor)
         img_cam.requires_grad = True
 
         grad_cam = GradCAM(cam_model, target)
-        with torch.inference_mode():
-            _, cam_mask = grad_cam(img_cam, gender_tensor)
+        _, cam_mask = grad_cam(img_cam, gender_tensor)
 
         target._forward_hooks.clear()
         target._backward_hooks.clear()
 
         heatmap_img = overlay_heatmap(img_cam.detach().cpu(), cam_mask)
-        ok, buffer = cv2.imencode(".jpg", heatmap_img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        ok, buffer = cv2.imencode(".jpg", heatmap_img)
         if not ok:
             return None
 
@@ -2324,9 +2368,6 @@ async def predict_bone_age(
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
     contrast: float = Form(1.0),
-    tta_enabled: bool = Form(False, description="Enable test-time augmentation (slower but more accurate)"),
-    quick_mode: bool = Form(False, description="Skip joint detection and grading for faster results"),
-    minimal_mode: bool = Form(False, description="Use single fold model for fastest prediction"),
 ):
     if not models_ensemble:
         raise HTTPException(status_code=503, detail="Age model not loaded")
@@ -2363,15 +2404,12 @@ async def predict_bone_age(
     gender_val = 1.0 if gender_lower == "male" else 0.0
     gender_tensor = torch.tensor([[gender_val]], dtype=torch.float32, device=device)
 
-    if minimal_mode:
-        quick_mode = True
-
     try:
         content = await file.read()
 
         anomalies = []
         detection_image_base64 = None
-        if fracture_detector and not quick_mode:
+        if fracture_detector:
             try:
                 anomalies, detection_image_base64 = fracture_detector.detect(
                     content,
@@ -2388,18 +2426,14 @@ async def predict_bone_age(
             "joints": {},
             "plot_image_base64": None,
         }
-        joint_grades = {}
-        joint_semantic_13 = {}
-        joint_rus_total_score = None
-        joint_rus_details = []
-
-        if not quick_mode and joint_recognizer:
+        if joint_recognizer:
             try:
                 recognized_joints_13 = joint_recognizer.recognize_13(content)
             except Exception as rec_exc:
                 print(f"Small joint recognize failed: {rec_exc}")
 
-        if not quick_mode and joint_grader:
+        joint_grades = {}
+        if joint_grader:
             try:
                 joint_grades = joint_grader.predict_detected_joints(
                     content,
@@ -2410,11 +2444,18 @@ async def predict_bone_age(
                 )
             except Exception as joint_exc:
                 print(f"Joint grading failed: {joint_exc}")
-            joint_grades = semantic_align_missing_joint_grades(joint_grades)
+        joint_grades = semantic_align_missing_joint_grades(joint_grades)
 
-            if joint_grades:
-                joint_semantic_13 = align_joint_semantics(joint_grades)
-                joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+        joint_semantic_13 = {}
+        joint_rus_total_score = None
+        joint_rus_details = []
+        if joint_grades:
+            joint_semantic_13 = align_joint_semantics(joint_grades)
+            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+
+        recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
+            recognized_joints_13.get("joints", {})
+        )
 
         # 决定是否使用预处理参数
         if preprocessing_enabled:
@@ -2422,7 +2463,7 @@ async def predict_bone_age(
         else:
             img_tensor = preprocess_image(content).to(device)
         
-        pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor, use_tta=tta_enabled, single_fold=minimal_mode)
+        pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor)
         pred_years = pred_months / 12.0
 
         report_details = generate_bone_report(pred_years, gender_lower)
@@ -2430,9 +2471,7 @@ async def predict_bone_age(
             predict_adult_height(height, pred_years, gender_lower) if height else None
         )
 
-        heatmap_base64 = None
-        if not quick_mode:
-            heatmap_base64 = build_gradcam_heatmap(img_tensor, gender_tensor)
+        heatmap_base64 = build_gradcam_heatmap(img_tensor, gender_tensor)
 
         result_payload = {
             "filename": file.filename,
@@ -3020,7 +3059,7 @@ async def joint_grading_predict(
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
     contrast: float = Form(1.0),
-    detect_only: bool = Form(False, description="Only detect joints, skip grading for faster response"),
+    use_dpv3: bool = Form(False, description="是否使用DP V3增强检测"),
 ):
     """小关节分级独立接口：仅进行13个小关节的检测与分级"""
     if not joint_grader:
@@ -3042,48 +3081,270 @@ async def joint_grading_predict(
         else:
             processed_content = content
         with open("check_this_image.jpg", "wb") as f:
-            f.write(processed_content)  # 运行后去服务器目录下看看这张图正正常
+            f.write(processed_content)
 
         recognized_joints_13 = {
             "hand_side": "unknown",
             "detected_count": 0,
             "joints": {},
             "plot_image_base64": None,
+            "dpv3_enhanced": False,
+            "dpv3_info": None
         }
-        
-        if joint_recognizer:
+
+        if use_dpv3 and dpv3_detector:
             try:
-                recognized_joints_13 = joint_recognizer.recognize_13(processed_content)
-            except Exception as rec_exc:
-                print(f"Small joint recognize failed: {rec_exc}")
+                nparr = np.frombuffer(processed_content, np.uint8)
+                img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img_bgr is not None:
+                    dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
+                    if dpv3_results.get('success'):
+                        recognized_joints_13["dpv3_enhanced"] = True
 
-        if detect_only:
-            if joint_recognizer and recognized_joints_13.get("joints"):
+                        radius_region = None
+                        ulna_region = None
+                        for region in dpv3_results.get('regions', []):
+                            label = region.get('label', 'Unknown')
+                            if label == 'Radius':
+                                radius_region = region
+                            elif label == 'Ulna':
+                                ulna_region = region
+
+                        if radius_region and ulna_region:
+                            radius_x = radius_region.get('centroid', (0, 0))[0]
+                            ulna_x = ulna_region.get('centroid', (0, 0))[0]
+                            if radius_x > ulna_x:
+                                hand_side = 'left'
+                            else:
+                                hand_side = 'right'
+                        else:
+                            hand_side = dpv3_results.get('hand_side', 'unknown')
+
+                        recognized_joints_13["dpv3_info"] = {
+                            "hand_side": hand_side,
+                            "total_regions": dpv3_results.get('total_regions'),
+                            "yolo_count": dpv3_results.get('yolo_count'),
+                            "bfs_count": dpv3_results.get('bfs_count'),
+                            "best_gray_range": dpv3_results.get('best_gray_range'),
+                            "merged_blocks": dpv3_results.get('merged_blocks')
+                        }
+
+                        finger_labels_en = ['First', 'Second', 'Third', 'Fourth', 'Fifth']
+                        finger_labels_cn = ['拇指', '食指', '中指', '环指', '小指']
+
+                        if hand_side == 'left':
+                            finger_order = finger_labels_en
+                        else:
+                            finger_order = list(reversed(finger_labels_en))
+
+                        finger_regions_map = {f: [] for f in finger_labels_en}
+                        finger_cn_map = dict(zip(finger_labels_en, finger_labels_cn))
+                        carpal_regions = []
+
+                        thumb_regions = []
+                        bone_type_regions = {
+                            'MCP': [],
+                            'ProximalPhalanx': [],
+                            'MiddlePhalanx': [],
+                            'DistalPhalanx': [],
+                        }
+
+                        for region in dpv3_results.get('regions', []):
+                            label = region.get('label', 'Unknown')
+                            if label in ['Radius', 'Ulna']:
+                                carpal_regions.append(region)
+                            elif label == 'MCPFirst':
+                                thumb_regions.append(region)
+                            elif label in bone_type_regions:
+                                bone_type_regions[label].append(region)
+
+                        remaining_regions = [
+                            region
+                            for regions in bone_type_regions.values()
+                            for region in regions
+                        ]
+                        #调试
+                        print(remaining_regions)
+
+                        if not thumb_regions and remaining_regions:
+                            img_width = img_bgr.shape[1]
+                            thumb_threshold = img_width * 0.85 if hand_side == 'left' else img_width * 0.15
+                            if hand_side == 'left':
+                                thumb_regions = [
+                                    r for r in remaining_regions
+                                    if r.get('centroid', (0, 0))[0] > thumb_threshold
+                                ]
+                            else:
+                                thumb_regions = [
+                                    r for r in remaining_regions
+                                    if r.get('centroid', (0, 0))[0] < thumb_threshold
+                                ]
+
+                            if thumb_regions:
+                                thumb_region_ids = {id(r) for r in thumb_regions}
+                                for label, regions in bone_type_regions.items():
+                                    bone_type_regions[label] = [
+                                        r for r in regions if id(r) not in thumb_region_ids
+                                    ]
+
+                        finger_regions_map['First'].extend(thumb_regions)
+
+                        other_finger_labels = ['Second', 'Third', 'Fourth', 'Fifth']
+                        for label, regions in bone_type_regions.items():
+                            if not regions:
+                                continue
+
+                            sorted_by_x = sorted(regions, key=lambda r: r.get('centroid', (0, 0))[0])
+                            if hand_side == 'left':
+                                sorted_by_x.reverse()
+
+                            primary_regions = sorted_by_x[:len(other_finger_labels)]
+                            overflow_regions = sorted_by_x[len(other_finger_labels):]
+
+                            for finger, region in zip(other_finger_labels, primary_regions):
+                                finger_regions_map[finger].append(region)
+
+                            # If a detector emits duplicate boxes for the same bone type,
+                            # attach extras to the nearest finger by x-position instead of
+                            # blindly slicing all bones together into one finger bucket.
+                            if overflow_regions:
+                                finger_targets = [
+                                    (finger, region.get('centroid', (0, 0))[0])
+                                    for finger, region in zip(other_finger_labels, primary_regions)
+                                ]
+                                for overflow_region in overflow_regions:
+                                    overflow_x = overflow_region.get('centroid', (0, 0))[0]
+                                    nearest_finger = min(
+                                        finger_targets,
+                                        key=lambda item: abs(item[1] - overflow_x)
+                                    )[0]
+                                    finger_regions_map[nearest_finger].append(overflow_region)
+
+                        joints = {}
+                        ordered_joints = []
+                        joint_index = 0
+
+                        for finger in finger_order:
+                            finger_regions = finger_regions_map[finger]
+                            if not finger_regions:
+                                continue
+
+                            sorted_regions = sorted(
+                                finger_regions,
+                                key=lambda r: (r.get('centroid', (0, 0))[1], r.get('centroid', (0, 0))[0])
+                            )
+
+                            for region in sorted_regions:
+                                label = region.get('label', 'Unknown')
+                                label_cn = region.get('label_cn', label)
+                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
+                                x1, y1, x2, y2 = bbox_coords
+
+                                if label == 'MCPFirst':
+                                    grade_label = 'MCPFirst'
+                                elif label == 'ProximalPhalanx':
+                                    grade_label = f'PIP{finger}'
+                                elif label == 'DistalPhalanx':
+                                    grade_label = f'DIP{finger}'
+                                elif label == 'MiddlePhalanx':
+                                    grade_label = f'MIP{finger}'
+                                elif label == 'MCP':
+                                    grade_label = f'MCP{finger}'
+                                else:
+                                    grade_label = label
+
+                                joint_data = {
+                                    "type": label_cn,
+                                    "label": grade_label,
+                                    "yolo_label": label,
+                                    "finger": finger,
+                                    "finger_cn": finger_cn_map[finger],
+                                    "order": joint_index,
+                                    "score": round(region.get('confidence', 0.5), 4),
+                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
+                                    "source": region.get('source', 'unknown'),
+                                    "coord": [
+                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
+                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
+                                        round((x2 - x1) / img_bgr.shape[1], 4),
+                                        round((y2 - y1) / img_bgr.shape[0], 4)
+                                    ]
+                                }
+
+                                if grade_label in joints:
+                                    idx = 1
+                                    while f"{grade_label}_{idx}" in joints:
+                                        idx += 1
+                                    joint_key = f"{grade_label}_{idx}"
+                                else:
+                                    joint_key = grade_label
+
+                                joints[joint_key] = joint_data
+                                ordered_joints.append(joint_data)
+                                joint_index += 1
+
+                        if carpal_regions:
+                            sorted_carpal = sorted(
+                                carpal_regions,
+                                key=lambda r: r.get('centroid', (0, 0))[1]
+                            )
+
+                            for region in sorted_carpal:
+                                label = region.get('label', 'Unknown')
+                                label_cn = region.get('label_cn', label)
+                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
+                                x1, y1, x2, y2 = bbox_coords
+
+                                joint_data = {
+                                    "type": label_cn,
+                                    "label": label,
+                                    "finger": 'Wrist',
+                                    "finger_cn": '腕骨',
+                                    "order": joint_index,
+                                    "score": round(region.get('confidence', 0.5), 4),
+                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
+                                    "source": region.get('source', 'unknown'),
+                                    "coord": [
+                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
+                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
+                                        round((x2 - x1) / img_bgr.shape[1], 4),
+                                        round((y2 - y1) / img_bgr.shape[0], 4)
+                                    ]
+                                }
+
+                                if label in joints:
+                                    idx = 1
+                                    while f"{label}_{idx}" in joints:
+                                        idx += 1
+                                    joint_key = f"{label}_{idx}"
+                                else:
+                                    joint_key = label
+
+                                joints[joint_key] = joint_data
+                                ordered_joints.append(joint_data)
+                                joint_index += 1
+
+                        recognized_joints_13["detected_count"] = len(joints)
+                        recognized_joints_13["hand_side"] = hand_side
+                        recognized_joints_13["joints"] = joints
+                        recognized_joints_13["ordered_joints"] = ordered_joints
+                        recognized_joints_13["finger_order"] = finger_order
+                        print(f"✅ DP V3 enhanced detection: {recognized_joints_13['detected_count']} bones detected")
+            except Exception as dpv3_exc:
+                print(f"DP V3 detection failed: {dpv3_exc}")
+                import traceback
+                traceback.print_exc()
+
+        if not recognized_joints_13.get("dpv3_enhanced"):
+            joints = {}
+            if joint_recognizer:
                 try:
-                    nparr = np.frombuffer(processed_content, np.uint8)
-                    img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    img_bgr = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
-                    plot_base64 = joint_recognizer._render_with_plt(
-                        img_bgr,
-                        recognized_joints_13.get("joints", {}),
-                        recognized_joints_13.get("hand_side", "unknown"),
-                    )
-                    if plot_base64:
-                        recognized_joints_13["plot_image_base64"] = plot_base64
-                except Exception as plot_exc:
-                    print(f"Plot render failed in detect_only: {plot_exc}")
-
-            return {
-                "success": True,
-                "filename": file.filename,
-                "gender": gender_lower,
-                "joint_detect_13": recognized_joints_13,
-                "joint_grades": {},
-                "joint_semantic_13": {},
-                "joint_rus_total_score": None,
-                "joint_rus_details": [],
-                "detect_only": True,
-            }
+                    recognized_joints_13 = joint_recognizer.recognize_13(processed_content)
+                    recognized_joints_13["dpv3_enhanced"] = False
+                    recognized_joints_13["dpv3_info"] = None
+                except Exception as rec_exc:
+                    print(f"Small joint recognize failed: {rec_exc}")
+            joints = recognized_joints_13.get("joints", {})
 
         joint_grades = {}
         try:
@@ -3111,12 +3372,30 @@ async def joint_grading_predict(
         if joint_recognizer and joint_grades:
             try:
                 nparr = np.frombuffer(processed_content, np.uint8)
-                img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                img_bgr = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
-                
+                img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                orig_h, orig_w = img_bgr_orig.shape[:2]
+
+                img_bgr = cv2.resize(img_bgr_orig, (joint_recognizer.imgsz, joint_recognizer.imgsz))
+                scale_x = joint_recognizer.imgsz / orig_w
+                scale_y = joint_recognizer.imgsz / orig_h
+
+                scaled_joints = {}
+                for joint_key, joint_data in recognized_joints_13.get("joints", {}).items():
+                    bbox = joint_data.get("bbox_xyxy", [0, 0, 0, 0])
+                    x1, y1, x2, y2 = bbox
+                    scaled_joints[joint_key] = {
+                        **joint_data,
+                        "bbox_xyxy": [
+                            x1 * scale_x,
+                            y1 * scale_y,
+                            x2 * scale_x,
+                            y2 * scale_y
+                        ]
+                    }
+
                 new_plot = joint_recognizer._render_with_plt(
-                    img_bgr, 
-                    recognized_joints_13.get("joints", {}), 
+                    img_bgr,
+                    scaled_joints,
                     recognized_joints_13.get("hand_side", "unknown"),
                     grades=joint_grades
                 )
@@ -3124,6 +3403,8 @@ async def joint_grading_predict(
                     recognized_joints_13["plot_image_base64"] = new_plot
             except Exception as plot_exc:
                 print(f"Re-rendering plot with grades failed: {plot_exc}")
+                import traceback
+                traceback.print_exc()
 
         return {
             "success": True,
@@ -3134,6 +3415,7 @@ async def joint_grading_predict(
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_total_score": joint_rus_total_score,
             "joint_rus_details": joint_rus_details,
+            "detection_algorithm": "dpv3" if recognized_joints_13.get("dpv3_enhanced") else "yolo"
         }
     except HTTPException:
         raise
@@ -3141,6 +3423,145 @@ async def joint_grading_predict(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"小关节分级诊断失败: {exc}")
+
+
+@app.post("/joint-dpv3-detect")
+async def joint_dpv3_detect(
+    file: UploadFile = File(...),
+    gender: str = Form(..., description="Gender: 'male' or 'female'"),
+    preprocessing_enabled: bool = Form(False),
+    brightness: float = Form(0.0),
+    contrast: float = Form(1.0),
+):
+    """
+    DP V3增强小关节检测接口：使用DP灰度扩展算法补充检测腕骨等YOLO未检测到的骨骼
+
+    特点：
+    1. YOLO检测21个标准骨骼
+    2. 创建YOLO遮罩排除已检测区域
+    3. BFS聚类分块（仅非遮罩区域）
+    4. Union-Find去重合并重叠分块
+    5. DP灰度扩展: YOLO(21) + BFS补充 = 23个骨骼
+    """
+    if not dpv3_detector:
+        raise HTTPException(status_code=503, detail="DP V3检测器未加载，请检查模型文件")
+
+    if not joint_grader:
+        raise HTTPException(status_code=503, detail="小关节分级模型未加载")
+
+    gender_lower = gender.lower()
+    if gender_lower not in ["male", "female"]:
+        raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
+
+    try:
+        content = await file.read()
+        validate_image_content(content)
+
+        if preprocessing_enabled:
+            try:
+                processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+            except Exception:
+                processed_content = content
+        else:
+            processed_content = content
+
+        nparr = np.frombuffer(processed_content, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr is None:
+            raise HTTPException(status_code=400, detail="无法解码图像")
+
+        dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
+
+        detected_joints = {}
+        if dpv3_results.get('success'):
+            h, w = img_bgr.shape[:2]
+            for region in dpv3_results.get('regions', []):
+                label = region.get('label', 'Unknown')
+                label_cn = region.get('label_cn', label)
+                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
+
+                detected_joints[label_cn] = {
+                    "type": label_cn,
+                    "score": region.get('confidence', 0.5),
+                    "bbox_xyxy": list(bbox_coords),
+                    "source": region.get('source', 'unknown'),
+                    "coord": [
+                        region['centroid'][0] / w,
+                        region['centroid'][1] / h,
+                        (bbox_coords[2] - bbox_coords[0]) / w,
+                        (bbox_coords[3] - bbox_coords[1]) / h
+                    ]
+                }
+
+        joint_grades = {}
+        try:
+            joint_grades = joint_grader.predict_detected_joints(
+                processed_content,
+                detected_joints,
+                JOINT_IMG_SIZE,
+                IMAGENET_MEAN,
+                IMAGENET_STD,
+            )
+        except Exception as joint_exc:
+            print(f"Joint grading failed: {joint_exc}")
+
+        joint_grades = semantic_align_missing_joint_grades(joint_grades)
+
+        joint_semantic_13 = {}
+        joint_rus_total_score = 0.0
+        joint_rus_details = []
+        if joint_grades:
+            joint_semantic_13 = align_joint_semantics(joint_grades)
+            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+            if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
+                joint_rus_total_score = 0.0
+
+        plot_image_base64 = None
+        if joint_recognizer and detected_joints:
+            try:
+                img_resized = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
+                plot_image_base64 = joint_recognizer._render_with_plt(
+                    img_resized,
+                    detected_joints,
+                    dpv3_results.get('hand_side', 'unknown'),
+                    grades=joint_grades
+                )
+            except Exception as plot_exc:
+                print(f"DP V3 plot rendering failed: {plot_exc}")
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "gender": gender_lower,
+            "joint_detect_13": {
+                "hand_side": dpv3_results.get('hand_side', 'unknown'),
+                "detected_count": len(detected_joints),
+                "joints": detected_joints,
+                "rus_13_joints": standardize_detected_joints_to_rus(detected_joints),
+                "plot_image_base64": plot_image_base64,
+                "dpv3_enhanced": True,
+                "dpv3_info": {
+                    "yolo_count": dpv3_results.get('yolo_count'),
+                    "bfs_count": dpv3_results.get('bfs_count'),
+                    "total_regions": dpv3_results.get('total_regions'),
+                    "best_gray_range": dpv3_results.get('best_gray_range'),
+                    "merged_blocks": dpv3_results.get('merged_blocks'),
+                    "initial_gray_range": dpv3_results.get('initial_gray_range')
+                }
+            },
+            "joint_grades": joint_grades,
+            "joint_semantic_13": joint_semantic_13,
+            "joint_rus_total_score": joint_rus_total_score,
+            "joint_rus_details": joint_rus_details,
+            "detection_algorithm": "dpv3"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"DP V3小关节检测失败: {exc}")
 
 
 @app.post("/formula-calculation")

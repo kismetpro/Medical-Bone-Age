@@ -43,6 +43,7 @@ export interface ManagedAccount {
 }
 
 export type ActiveTab =
+    | 'predict'
     | 'records'
     | 'preprocessing'
     | 'joint-grade'

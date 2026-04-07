@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { 
-    Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2, Loader2 
+    Upload, Moon, Sun, Contrast, RotateCcw, Activity, BarChart2 
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell 
@@ -10,37 +10,47 @@ import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { API_BASE } from '../../../config';
 
-const LazyImage: React.FC<{ src: string; alt: string; className?: string; style?: React.CSSProperties }> = ({ src, alt, className, style }) => {
-    const [loaded, setLoaded] = useState(false);
-    return (
-        <div style={{ position: 'relative', ...style }}>
-            {!loaded && (
-                <div style={{ 
-                    position: 'absolute', inset: 0, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: '#f1f5f9', borderRadius: '8px',
-                    color: '#64748b', fontSize: '0.875rem'
-                }}>
-                    <Loader2 size={20} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                </div>
-            )}
-            <img 
-                src={src} 
-                alt={alt} 
-                className={className} 
-                style={style} 
-                loading="lazy"
-                onLoad={() => setLoaded(true)}
-                onError={() => setLoaded(true)}
-            />
-        </div>
-    );
-};
-
 interface JointGradeTabProps {
     result: PredictionResult | null;
     setResult?: (result: PredictionResult | null) => void;
 }
+
+const RUS_13_ORDER = [
+    'Radius',
+    'Ulna',
+    'MCPFirst',
+    'MCPThird',
+    'MCPFifth',
+    'PIPFirst',
+    'PIPThird',
+    'PIPFifth',
+    'MIPThird',
+    'MIPFifth',
+    'DIPFirst',
+    'DIPThird',
+    'DIPFifth',
+];
+
+const NON_RECOGNIZED_STATUSES = new Set([
+    'missing',
+    'pending',
+    'crop_invalid',
+    'model_missing',
+    'semantic_default',
+    'error',
+]);
+
+const hasUsableGrade = (joint: { grade_raw?: number; status?: string } | undefined) => {
+    if (!joint) return false;
+    if (joint.grade_raw === undefined || joint.grade_raw === null) return false;
+    return !NON_RECOGNIZED_STATUSES.has(joint.status ?? 'ok');
+};
+
+const isPendingJoint = (joint: { grade_raw?: number; status?: string } | undefined) => {
+    if (!joint) return true;
+    if (NON_RECOGNIZED_STATUSES.has(joint.status ?? 'ok')) return true;
+    return joint.grade_raw === undefined || joint.grade_raw === null;
+};
 
 const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
     // --- 1. 核心状态管理 ---
@@ -52,8 +62,6 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
     const [realAge, setRealAge] = useState('');
     const [currentHeight, setCurrentHeight] = useState('');
     const [imgSettings, setImgSettings] = useState<ImageSettings>(DEFAULT_SETTINGS);
-    const [detectOnly, setDetectOnly] = useState(false);
-    const [isDetecting, setIsDetecting] = useState(false);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,7 +97,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
         }
     };
 
-    const handleSubmit = async (doGrading: boolean = false) => {
+    const handleSubmit = async () => {
         if (!file &&!preview) {
             setError('请先上传 X 光影像图片');
             return;
@@ -106,7 +114,7 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
             formData.append('preprocessing_enabled', String(imgSettings.usePreprocessing));
             formData.append('brightness', String(imgSettings.brightness - 100));
             formData.append('contrast', String(imgSettings.contrast));
-            formData.append('detect_only', String(!doGrading));
+            formData.append('use_dpv3', 'true');
 
             const token = localStorage.getItem('boneage_token');
             const headers: Record<string, string> = {};
@@ -130,14 +138,6 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
             };
             
             if (setResult) setResult(newResult);
-            
-            if (data.detect_only) {
-                setDetectOnly(true);
-                setIsDetecting(true);
-            } else {
-                setDetectOnly(false);
-                setIsDetecting(false);
-            }
         } catch (err: any) {
             setError(err.message || '分析失败，请检查网络或影像质量');
         } finally {
@@ -145,48 +145,40 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
         }
     };
 
-    const handleStartGrading = () => {
-        if (file || preview) {
-            setDetectOnly(false);
-            handleSubmit(true);
-        }
-    };
-
     // --- 4. 数据转换逻辑 (用于图表和表格) ---
-    const safeNum = (val: any, fallback: number = 0): number => {
-        if (val === null || val === undefined) return fallback;
-        const n = Number(val);
-        return isNaN(n) ? fallback : n;
-    };
+    const displayJointGrades = useMemo(() => {
+        const source = result?.joint_semantic_13 ?? result?.joint_grades;
+        if (!source) return [];
+
+        return RUS_13_ORDER
+            .filter((jointName) => source[jointName])
+            .map((jointName) => [jointName, source[jointName]] as const);
+    }, [result]);
 
     const chartData = useMemo(() => {
-        if (!result?.joint_grades) return [];
-        return Object.entries(result.joint_grades)
-            .filter(([_, g]) => g?.status === 'ok' && g.grade_raw !== undefined && g.grade_raw !== null)
+        return displayJointGrades
+            .filter(([_, g]) => hasUsableGrade(g))
             .map(([name, g]) => {
-                const grade = safeNum(g.grade_raw, 0);
-                const score = safeNum(g.score, 0);
-                let color = '#22c55e';
-                if (grade > 10) color = '#ef4444';
-                else if (grade > 7) color = '#f97316';
-                else if (grade > 4) color = '#eab308';
+                let color = '#22c55e'; // 默认绿色
+                if (g.grade_raw! > 10) color = '#ef4444';
+                else if (g.grade_raw! > 7) color = '#f97316';
+                else if (g.grade_raw! > 4) color = '#eab308';
                 
                 return { 
                     joint: name, 
-                    grade, 
-                    confidence: Math.round(score * 100), 
+                    grade: g.grade_raw ?? 0, 
+                    confidence: Math.round((g.score || 0) * 100), 
                     color 
                 };
             })
             .sort((a, b) => b.grade - a.grade);
-    }, [result]);
+    }, [displayJointGrades]);
 
     const pendingJoints = useMemo(() => {
-        if (!result?.joint_grades) return [];
-        return Object.entries(result.joint_grades)
-            .filter(([_, g]) => !g || g.status !== 'ok' || g.grade_raw === undefined || g.grade_raw === null)
+        return displayJointGrades
+            .filter(([_, g]) => isPendingJoint(g))
             .map(([name]) => name);
-    }, [result]);
+    }, [displayJointGrades]);
 
     const recognizedRows = useMemo(() => {
         return chartData.map(item => ({
@@ -318,14 +310,9 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                 </div>
             </div>
 
-            <button className={styles.btnAnalyze} onClick={() => handleSubmit(false)} disabled={loading || (!file && !preview)}>
-                {loading && !detectOnly ? 'AI 分析中...' : <><Activity size={18} /> 快速检测关节</>}
+            <button className={styles.btnAnalyze} onClick={handleSubmit} disabled={loading || (!file && !preview)}>
+                {loading ? 'AI 分析中...' : <><Activity size={18} /> 开始小关节评估</>}
             </button>
-            {isDetecting && (
-                <button className={styles.btnAnalyze} onClick={handleStartGrading} disabled={loading} style={{ marginTop: '10px', backgroundColor: '#f97316' }}>
-                    {loading ? '正在分级...' : <><Activity size={18} /> 开始详细分级</>}
-                </button>
-            )}
             {error && <div className={styles.errorBanner}>{error}</div>}
         </div>
 
@@ -343,14 +330,14 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                         <div className={styles.sectionBlock}>
                             <h4>AI 检测可视化</h4>
                             <div className={styles.visualInfo}>
-                                <LazyImage 
+                                <img 
                                     src={result.joint_detect_13.plot_image_base64} 
                                     alt="检测结果" 
                                     className={styles.heatmapImg} 
-                                    style={{ maxWidth: '300px' }}
+                                    style={{ maxWidth: '300px' }} 
                                 />
                                 <div className={styles.metaInfo}>
-                                    <p><strong>识别数量：</strong>{result.joint_detect_13.detected_count} / 13</p>
+                                    <p><strong>识别数量：</strong>{result.joint_detect_13.detected_count}/21</p>
                                     <p><strong>判定方位：</strong>{result.joint_detect_13.hand_side === 'left' ? '左手' : '右手'}</p>
                                 </div>
                             </div>
