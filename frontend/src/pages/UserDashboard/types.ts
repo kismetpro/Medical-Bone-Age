@@ -43,6 +43,7 @@ export interface PredictionResult {
     joint_grades?: Record<string, JointGrade>;
     joint_semantic_13?: Record<string, JointGrade>;
     joint_rus_total_score?: number;
+    rus_bone_age_years?: number | null;
     joint_rus_details?: RusChnDetail[];
     anomalies?: AnomalyItem[];
 }
@@ -88,4 +89,4 @@ brightness: 100, // 亮度初始值为 100%
     scale: 100
 };
 
-export type ActiveTab = 'records' | 'consultation' | 'community' | 'settings' | 'preprocessing';
+export type ActiveTab = 'predict' | 'joint-grade' | 'history' | 'consultation' | 'community' | 'settings' | 'preprocessing' | 'bone-age-development';

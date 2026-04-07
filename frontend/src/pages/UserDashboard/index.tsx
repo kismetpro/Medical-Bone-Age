@@ -24,6 +24,7 @@ import { DEFAULT_SETTINGS } from './types';
 // --- Components ---
 import UserSidebar from './components/UserSidebar';
 import PredictTab from './components/PredictTab';
+import JointGradeTab from './components/JointGradeTab';
 import HistoryTab from './components/HistoryTab';
 import ConsultationPage from '../Consultation';
 import CommunityPage from '../Community';
@@ -48,8 +49,9 @@ export default function UserDashboard() {
 
     const [history, setHistory] = useState<PredictionResult[]>([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState<'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development'>('predict');
+    const [activeTab, setActiveTab] = useState<'predict' | 'joint-grade' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development'>('predict');
     const [boneAgePoints, setBoneAgePoints] = useState<BoneAgePoint[]>([]);
+    const [jointResult, setJointResult] = useState<PredictionResult | null>(null);
     const [trend, setTrend] = useState<BoneAgeTrend | null>(null);
     const [pointTime, setPointTime] = useState('');
     const [pointBoneAge, setPointBoneAge] = useState('');
@@ -146,12 +148,20 @@ export default function UserDashboard() {
 
     const generateMedicalReport = (data: PredictionResult | null) => {
         if (!data) return "分析中...";
-        const { predicted_age_years, gender } = data;
+        const { predicted_age_years, gender, rus_bone_age_years, joint_rus_total_score } = data;
         const parsed = parseAnomalies(data);
 
         let report = `【影像学分析报告】\n`;
         report += `1. 基本信息：受检者性别为${gender === 'male' ? '男' : '女'}，`;
-        report += `测定骨龄约为 ${predicted_age_years.toFixed(1)} 岁。\n\n`;
+        report += `测定骨龄约为 ${predicted_age_years.toFixed(1)} 岁`;
+        if (rus_bone_age_years) {
+            report += `（RUS-CHN法：${rus_bone_age_years.toFixed(1)} 岁`;
+            if (joint_rus_total_score) {
+                report += `，总分 ${joint_rus_total_score}`;
+            }
+            report += `）`;
+        }
+        report += `。\n\n`;
         report += `2. 影像发现：\n`;
         if (parsed.fractures.length > 0) {
             report += `   - [警告] 在影像中识别到 ${parsed.fractures.length} 处疑似骨折区域。建议临床结合压痛点进一步核实。\n`;
@@ -382,7 +392,7 @@ return (
         {/* 1. 侧边栏：状态清理门卫 */}
         <UserSidebar 
             activeTab={activeTab} 
-            setActiveTab={(tab: 'predict' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development') => {
+            setActiveTab={(tab: 'predict' | 'joint-grade' | 'history' | 'community' | 'consultation' | 'settings' | 'preprocessing' | 'bone-age-development') => {
                 if (tab !== activeTab) {
                     setError(null);    // 切换瞬间清空报错，防止残留报错锁死 UI
                     setLoading(false); // 强制停止加载动画
@@ -495,6 +505,15 @@ return (
                         }}
                         trendData={trendData || []}
                     />
+                )}
+
+                {activeTab === 'joint-grade' && (
+                    <div className={styles.workspaceGrid}>
+                        <div className={styles.resultsCard} style={{ width: '100%', gridColumn: '1 / -1' }}>
+                            <h3 style={{ margin: '0 0 1rem 0' }}>小关节分级分析</h3>
+                            <JointGradeTab result={jointResult} setResult={setJointResult} />
+                        </div>
+                    </div>
                 )}
 
                 {activeTab === 'consultation' && <ConsultationPage />}

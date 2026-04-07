@@ -269,12 +269,20 @@ useEffect(() => {
 
   const generateMedicalReport = (data: PredictionResult | null) => {
     if (!data) return '分析中...';
-    const { predicted_age_years, gender } = data;
+    const { predicted_age_years, gender, rus_bone_age_years, joint_rus_total_score } = data;
     const parsed = parseAnomalies(data);
 
     let report = `【影像学分析报告】\n`;
     report += `1. 基本信息：受检者性别为${gender === 'male' ? '男' : '女'}，`;
-    report += `测定骨龄约为 ${predicted_age_years.toFixed(1)} 岁。\n\n`;
+    report += `测定骨龄约为 ${predicted_age_years.toFixed(1)} 岁`;
+    if (rus_bone_age_years) {
+      report += `（RUS-CHN法：${rus_bone_age_years.toFixed(1)} 岁`;
+      if (joint_rus_total_score) {
+        report += `，总分 ${joint_rus_total_score}`;
+      }
+      report += `）`;
+    }
+    report += `。\n\n`;
     report += `2. 影像发现：\n`;
     if (parsed.fractures.length > 0) {
       report += `   - [警告] 在影像中识别到 ${parsed.fractures.length} 处疑似骨折区域。建议临床结合压痛点进一步核实。\n`;

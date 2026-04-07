@@ -18,6 +18,8 @@ export interface PredictionDetail extends PredictionRecord {
     foreign_object_detection?: ForeignObjectDetection;
     heatmap_base64?: string; 
     rus_chn_details?: { total_score?: number }; 
+    rus_bone_age_years?: number | null;
+    joint_rus_total_score?: number;
 }
 
 export interface PatientUser { 

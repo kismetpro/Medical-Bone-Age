@@ -23,9 +23,19 @@ import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms.functional as TF
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response, Query
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    Request,
+    Response,
+    Query,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import StreamingResponse
@@ -41,6 +51,27 @@ from app.utils.growth_standards import predict_adult_height
 from app.utils.notification_service import NotificationService
 from app.utils.rus_chn import generate_bone_report, calc_bone_age_from_score
 from dp_bone_detector_v3 import DPV3BoneDetector
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.dirname(APP_DIR)
+
+
+def resolve_backend_path(path: str) -> str:
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+
+    candidates = [
+        os.path.abspath(path),
+        os.path.abspath(os.path.join(BACKEND_DIR, path)),
+        os.path.abspath(os.path.join(APP_DIR, path)),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    return candidates[1]
 
 
 # ----------------------------
@@ -167,13 +198,15 @@ class JointGrader:
     def load_all(self, joint_names: List[str]):
         loaded = 0
         for joint in joint_names:
-            p = os.path.join(self.model_dir,  f"best_{joint}.pth")
+            p = os.path.join(self.model_dir, f"best_{joint}.pth")
             if not os.path.exists(p):
                 print(f"WARNING: joint model not found: {p}")
                 continue
 
             ckpt = torch.load(p, map_location=self.device)
-            class_to_idx = ckpt.get("class_to_idx", None) if isinstance(ckpt, dict) else None
+            class_to_idx = (
+                ckpt.get("class_to_idx", None) if isinstance(ckpt, dict) else None
+            )
             if not class_to_idx:
                 print(f"WARNING: class_to_idx missing in {p}, skip")
                 continue
@@ -198,7 +231,9 @@ class JointGrader:
 
         print(f"Joint models loaded: {loaded}")
 
-    def preprocess(self, image_bytes: bytes, img_size: int, mean: np.ndarray, std: np.ndarray):
+    def preprocess(
+        self, image_bytes: bytes, img_size: int, mean: np.ndarray, std: np.ndarray
+    ):
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
@@ -213,7 +248,9 @@ class JointGrader:
         img = np.ascontiguousarray(img)
         return torch.from_numpy(img).float().to(self.device)
 
-    def preprocess_patch(self, patch_bgr: np.ndarray, img_size: int, mean: np.ndarray, std: np.ndarray):
+    def preprocess_patch(
+        self, patch_bgr: np.ndarray, img_size: int, mean: np.ndarray, std: np.ndarray
+    ):
         if patch_bgr is None or patch_bgr.size == 0:
             raise ValueError("Invalid patch for joint grading")
         patch = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2RGB)
@@ -226,7 +263,9 @@ class JointGrader:
         return torch.from_numpy(patch).float().to(self.device)
 
     @staticmethod
-    def _safe_crop(img_bgr: np.ndarray, bbox_xyxy: List[float], expand_ratio: float = 0.08):
+    def _safe_crop(
+        img_bgr: np.ndarray, bbox_xyxy: List[float], expand_ratio: float = 0.08
+    ):
         h, w = img_bgr.shape[:2]
         x1, y1, x2, y2 = bbox_xyxy
         bw = max(1.0, x2 - x1)
@@ -240,10 +279,13 @@ class JointGrader:
         if x2 <= x1 or y2 <= y1:
             return None
         return img_bgr[y1:y2, x1:x2].copy()
-    #这里是小关节分级逻辑，去掉了对图像的预处理
+
+    # 这里是小关节分级逻辑，去掉了对图像的预处理
 
     @torch.no_grad()
-    def predict(self, image_bytes: bytes, img_size: int, mean: np.ndarray, std: np.ndarray):
+    def predict(
+        self, image_bytes: bytes, img_size: int, mean: np.ndarray, std: np.ndarray
+    ):
         if not self.models:
             return {}
 
@@ -280,11 +322,10 @@ class JointGrader:
             return {}
 
         nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        #修改了size
-        img_bgr = cv2.resize(img_bgr, (img_size, img_size))
-        if img_bgr is None:
+        img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr_orig is None:
             raise ValueError("Could not decode image for detected-joint grading")
+        img_bgr_resized = cv2.resize(img_bgr_orig, (img_size, img_size))
 
         out: Dict[str, Dict] = {}
         for joint_name, det in detected_joints.items():
@@ -306,7 +347,9 @@ class JointGrader:
                 }
                 continue
 
-            patch = self._safe_crop(img_bgr, bbox)
+            bbox_space = det.get("bbox_space")
+            crop_source = img_bgr_orig if bbox_space == "original" else img_bgr_resized
+            patch = self._safe_crop(crop_source, bbox)
             if patch is None:
                 out[joint_name] = {
                     "model_joint": model_joint,
@@ -360,7 +403,9 @@ class FractureDetector:
             8: "text",
         }
 
-    def detect(self, image_bytes: bytes, score_threshold: float = 0.3) -> Tuple[List[Dict], Optional[str]]:
+    def detect(
+        self, image_bytes: bytes, score_threshold: float = 0.3
+    ) -> Tuple[List[Dict], Optional[str]]:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img_orig is None:
@@ -370,7 +415,9 @@ class FractureDetector:
         ok, buf = cv2.imencode(".jpg", img_640)
         detection_image_base64 = None
         if ok:
-            detection_image_base64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
+            detection_image_base64 = "data:image/jpeg;base64," + base64.b64encode(
+                buf
+            ).decode("utf-8")
 
         img = cv2.cvtColor(img_640, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1))
@@ -408,7 +455,13 @@ class SmallJointRecognizer:
         self.imgsz = imgsz
         self.conf = conf
 
-    def _render_with_plt(self, img_bgr: np.ndarray, joints: Dict[str, Dict], hand_side: str, grades: Dict[str, Dict] = None) -> Optional[str]:
+    def _render_with_plt(
+        self,
+        img_bgr: np.ndarray,
+        joints: Dict[str, Dict],
+        hand_side: str,
+        grades: Dict[str, Dict] = None,
+    ) -> Optional[str]:
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         fig, ax = plt.subplots(figsize=(8, 10), dpi=120)
         ax.imshow(img_rgb)
@@ -424,16 +477,16 @@ class SmallJointRecognizer:
                 linewidth=2,
             )
             ax.add_patch(rect)
-            
+
             # 基础标签：名称 + 置信度
             label = f"{name} {payload['score']:.2f}"
-            
+
             # 如果提供了分级信息，则在标签中加入分级
             if grades and name in grades:
-                grade = grades[name].get('grade_raw')
+                grade = grades[name].get("grade_raw")
                 if grade is not None:
                     label += f" G:{grade}"
-            
+
             ax.text(
                 x1,
                 max(0.0, y1 - 6.0),
@@ -461,13 +514,17 @@ class SmallJointRecognizer:
 
     def recognize_13(self, image_bytes: bytes) -> Dict:
         nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img_bgr is None:
-            return {"hand_side": "unknown", "detected_count": 0, "joints": {}, "plot_image_base64": None}
+        img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr_orig is None:
+            return {
+                "hand_side": "unknown",
+                "detected_count": 0,
+                "joints": {},
+                "plot_image_base64": None,
+            }
 
-        h, w = img_bgr.shape[:2]
-        #调试缩放比例
-        img_bgr = cv2.resize(img_bgr, (self.imgsz, self.imgsz))
+        h, w = img_bgr_orig.shape[:2]
+        img_bgr = cv2.resize(img_bgr_orig, (self.imgsz, self.imgsz))
         result = self.model.predict(
             source=img_bgr,
             imgsz=self.imgsz,
@@ -519,23 +576,37 @@ class SmallJointRecognizer:
                 final_13["Ulna"] = d
 
         map_finger_logic("MCP", "MCP", [0, 2, 4], ["First", "Third", "Fifth"])
-        map_finger_logic("ProximalPhalanx", "PIP", [0, 2, 4], ["First", "Third", "Fifth"])
+        map_finger_logic(
+            "ProximalPhalanx", "PIP", [0, 2, 4], ["First", "Third", "Fifth"]
+        )
         map_finger_logic("MiddlePhalanx", "MIP", [1, 2], ["Third", "Fifth"])
         map_finger_logic("DistalPhalanx", "DIP", [0, 2, 4], ["First", "Third", "Fifth"])
 
         joints: Dict[str, Dict] = {}
+        scale_x = w / self.imgsz
+        scale_y = h / self.imgsz
         for name, info in final_13.items():
             b = info["box"]
             x1, y1, x2, y2 = map(float, b.tolist())
+            x1_orig = x1 * scale_x
+            y1_orig = y1 * scale_y
+            x2_orig = x2 * scale_x
+            y2_orig = y2 * scale_y
             joints[name] = {
                 "type": name,
                 "score": round(float(info["score"]), 4),
-                "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                "bbox_xyxy": [
+                    round(x1_orig, 2),
+                    round(y1_orig, 2),
+                    round(x2_orig, 2),
+                    round(y2_orig, 2),
+                ],
+                "bbox_space": "original",
                 "coord": [
-                    round((x1 + x2) / 2.0 / w, 4),
-                    round((y1 + y2) / 2.0 / h, 4),
-                    round((x2 - x1) / w, 4),
-                    round((y2 - y1) / h, 4),
+                    round((x1_orig + x2_orig) / 2.0 / w, 4),
+                    round((y1_orig + y2_orig) / 2.0 / h, 4),
+                    round((x2_orig - x1_orig) / w, 4),
+                    round((y2_orig - y1_orig) / h, 4),
                 ],
             }
 
@@ -543,7 +614,7 @@ class SmallJointRecognizer:
         if is_left is not None:
             hand_side = "left" if is_left else "right"
 
-        plot_image_base64 = self._render_with_plt(img_bgr, joints, hand_side)
+        plot_image_base64 = self._render_with_plt(img_bgr_orig, joints, hand_side)
         return {
             "hand_side": hand_side,
             "detected_count": len(joints),
@@ -615,6 +686,231 @@ DETECTED_JOINT_FALLBACKS = {
     "DIPFifth": ["DIPFourth", "DIPThird", "DIPSecond"],
 }
 
+FINGER_LABELS_EN = ["First", "Second", "Third", "Fourth", "Fifth"]
+FINGER_LABELS_CN = {
+    "First": "拇指",
+    "Second": "食指",
+    "Third": "中指",
+    "Fourth": "环指",
+    "Fifth": "小指",
+}
+DPV3_PREFIX_RENAME_CONFIG = {
+    "MCP": {
+        "source_labels": {"MCPFirst", "MCP"},
+        "joint_names": ["MCPFirst", "MCPSecond", "MCPThird", "MCPFourth", "MCPFifth"],
+        "expected_count": 5,
+    },
+    "PIP": {
+        "source_labels": {"ProximalPhalanx"},
+        "joint_names": ["PIPFirst", "PIPSecond", "PIPThird", "PIPFourth", "PIPFifth"],
+        "expected_count": 5,
+    },
+    "MIP": {
+        "source_labels": {"MiddlePhalanx"},
+        "joint_names": ["MIPSecond", "MIPThird", "MIPFourth", "MIPFifth"],
+        "expected_count": 4,
+    },
+    "DIP": {
+        "source_labels": {"DistalPhalanx"},
+        "joint_names": ["DIPFirst", "DIPSecond", "DIPThird", "DIPFourth", "DIPFifth"],
+        "expected_count": 5,
+    },
+}
+
+
+def _region_center_x(region: Dict) -> float:
+    centroid = region.get("centroid", (0.0, 0.0))
+    if isinstance(centroid, (list, tuple)) and centroid:
+        return float(centroid[0])
+    return 0.0
+
+
+def _region_center_y(region: Dict) -> float:
+    centroid = region.get("centroid", (0.0, 0.0))
+    if isinstance(centroid, (list, tuple)) and len(centroid) > 1:
+        return float(centroid[1])
+    return 0.0
+
+
+def _region_confidence(region: Dict) -> float:
+    return float(region.get("confidence", 0.0))
+
+
+def _region_bbox(region: Dict) -> Tuple[float, float, float, float]:
+    bbox = region.get("bbox_coords", [0.0, 0.0, 0.0, 0.0])
+    if len(bbox) != 4:
+        return 0.0, 0.0, 0.0, 0.0
+    return tuple(float(v) for v in bbox)
+
+
+def _bbox_iou(
+    box_a: Tuple[float, float, float, float], box_b: Tuple[float, float, float, float]
+) -> float:
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+    if inter_area <= 0:
+        return 0.0
+
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    denom = area_a + area_b - inter_area
+    if denom <= 0:
+        return 0.0
+    return inter_area / denom
+
+
+def _dedupe_regions_by_overlap(
+    regions: List[Dict], expected_count: int, iou_threshold: float = 0.35
+) -> List[Dict]:
+    if not regions:
+        return []
+
+    ordered_by_conf = sorted(
+        regions,
+        key=lambda item: (
+            _region_confidence(item),
+            _region_bbox(item)[2] - _region_bbox(item)[0],
+        ),
+        reverse=True,
+    )
+
+    kept: List[Dict] = []
+    for region in ordered_by_conf:
+        region_box = _region_bbox(region)
+        if any(
+            _bbox_iou(region_box, _region_bbox(existing)) >= iou_threshold
+            for existing in kept
+        ):
+            continue
+        kept.append(region)
+
+    if len(kept) > expected_count:
+        kept = kept[:expected_count]
+
+    return kept
+
+
+def _order_regions_by_hand_side(regions: List[Dict], hand_side: str) -> List[Dict]:
+    ordered = sorted(regions, key=_region_center_x)
+    if hand_side == "left":
+        ordered.reverse()
+    return ordered
+
+
+def _joint_name_to_finger(joint_name: str) -> str:
+    for finger in FINGER_LABELS_EN:
+        if joint_name.endswith(finger):
+            return finger
+    return "Wrist"
+
+
+def _build_named_joint_payload(
+    region: Dict, joint_name: str, image_shape: Tuple[int, int], order: int
+) -> Dict:
+    img_h, img_w = image_shape
+    label = region.get("label", "Unknown")
+    label_cn = region.get("label_cn", label)
+    x1, y1, x2, y2 = _region_bbox(region)
+    finger = _joint_name_to_finger(joint_name)
+    finger_cn = FINGER_LABELS_CN.get(finger, "腕骨")
+
+    return {
+        "type": label_cn,
+        "label": joint_name,
+        "yolo_label": label,
+        "finger": finger,
+        "finger_cn": finger_cn,
+        "order": order,
+        "score": round(_region_confidence(region), 4),
+        "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+        "bbox_space": "original",
+        "source": region.get("source", "unknown"),
+        "coord": [
+            round(_region_center_x(region) / img_w, 4) if img_w else 0.0,
+            round(_region_center_y(region) / img_h, 4) if img_h else 0.0,
+            round((x2 - x1) / img_w, 4) if img_w else 0.0,
+            round((y2 - y1) / img_h, 4) if img_h else 0.0,
+        ],
+    }
+
+
+def _resolve_hand_side_from_regions(
+    regions: List[Dict], fallback: str = "unknown"
+) -> str:
+    radius_regions = [region for region in regions if region.get("label") == "Radius"]
+    ulna_regions = [region for region in regions if region.get("label") == "Ulna"]
+    if radius_regions and ulna_regions:
+        radius_region = max(radius_regions, key=_region_confidence)
+        ulna_region = max(ulna_regions, key=_region_confidence)
+        return (
+            "left"
+            if _region_center_x(radius_region) > _region_center_x(ulna_region)
+            else "right"
+        )
+    return fallback if fallback in {"left", "right"} else "unknown"
+
+
+def rename_dpv3_regions_to_named_joints(
+    regions: List[Dict],
+    image_shape: Tuple[int, int],
+    hand_side_hint: str = "unknown",
+) -> Tuple[Dict[str, Dict], List[Dict], str]:
+    img_h, img_w = image_shape
+    hand_side = _resolve_hand_side_from_regions(regions, hand_side_hint)
+    joints: Dict[str, Dict] = {}
+    ordered_joints: List[Dict] = []
+    joint_index = 0
+
+    for wrist_label in ["Radius", "Ulna"]:
+        wrist_regions = [
+            region for region in regions if region.get("label") == wrist_label
+        ]
+        if not wrist_regions:
+            continue
+        wrist_region = max(wrist_regions, key=_region_confidence)
+        payload = _build_named_joint_payload(
+            wrist_region, wrist_label, (img_h, img_w), joint_index
+        )
+        joints[wrist_label] = payload
+        ordered_joints.append(payload)
+        joint_index += 1
+
+    for prefix, config in DPV3_PREFIX_RENAME_CONFIG.items():
+        prefix_regions = [
+            region
+            for region in regions
+            if region.get("label") in config["source_labels"]
+        ]
+        if not prefix_regions:
+            continue
+
+        deduped_regions = _dedupe_regions_by_overlap(
+            prefix_regions, config["expected_count"]
+        )
+        ordered_regions = _order_regions_by_hand_side(deduped_regions, hand_side)
+
+        for joint_name, region in zip(
+            config["joint_names"], ordered_regions[: len(config["joint_names"])]
+        ):
+            payload = _build_named_joint_payload(
+                region, joint_name, (img_h, img_w), joint_index
+            )
+            joints[joint_name] = payload
+            ordered_joints.append(payload)
+            joint_index += 1
+
+    return joints, ordered_joints, hand_side
+
+
 SCORE_TABLE = {
     "female": {
         "Radius": [0, 10, 15, 22, 25, 40, 59, 91, 125, 138, 178, 192, 199, 203, 210],
@@ -669,6 +965,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[t] = {
                 "grade_raw": int(payload.get("grade_raw", 1)),
                 "score": float(payload.get("score", 0.0)),
+                "status": payload.get("status", "ok"),
                 "source_joint": src_joint,
                 "imputed": False,
             }
@@ -686,6 +983,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[rus_joint] = {
                 "grade_raw": aligned[picked]["grade_raw"],
                 "score": aligned[picked]["score"] * 0.95,
+                "status": "semantic_imputed",
                 "source_joint": aligned[picked]["source_joint"],
                 "imputed": True,
             }
@@ -693,6 +991,7 @@ def align_joint_semantics(joint_grades: Dict) -> Dict:
             aligned[rus_joint] = {
                 "grade_raw": 1,
                 "score": 0.0,
+                "status": "semantic_default",
                 "source_joint": "none",
                 "imputed": True,
             }
@@ -781,7 +1080,9 @@ def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
     return aligned
 
 
-def standardize_detected_joints_to_rus(detected_joints: Dict[str, Dict]) -> Dict[str, Dict]:
+def standardize_detected_joints_to_rus(
+    detected_joints: Dict[str, Dict],
+) -> Dict[str, Dict]:
     """
     将 21 点检测结果收敛为 RUS-13 标准关节视图。
     - 优先使用同名关节
@@ -824,22 +1125,34 @@ def standardize_detected_joints_to_rus(detected_joints: Dict[str, Dict]) -> Dict
 # Config
 # ----------------------------
 FOLD_MODEL_PATHS = [
-    "app/models/model_fold_0.pth",
-    "app/models/model_fold_1.pth",
-    "app/models/model_fold_2.pth",
-    "app/models/model_fold_3.pth",
-    "app/models/model_fold_4.pth",
+    resolve_backend_path("app/models/model_fold_0.pth"),
+    resolve_backend_path("app/models/model_fold_1.pth"),
+    resolve_backend_path("app/models/model_fold_2.pth"),
+    resolve_backend_path("app/models/model_fold_3.pth"),
+    resolve_backend_path("app/models/model_fold_4.pth"),
 ]
 EXTRA_FOLD_CANDIDATES = [
-    "app/models/model_fold_0 (1).pth",
-    "app/models/model_fold_1 (1).pth",
-    "app/models/model_fold_2 (1).pth",
-    "app/models/model_fold_3 (1).pth",
-    "app/models/model_fold_4 (1).pth",
+    resolve_backend_path("app/models/model_fold_0 (1).pth"),
+    resolve_backend_path("app/models/model_fold_1 (1).pth"),
+    resolve_backend_path("app/models/model_fold_2 (1).pth"),
+    resolve_backend_path("app/models/model_fold_3 (1).pth"),
+    resolve_backend_path("app/models/model_fold_4 (1).pth"),
 ]
 
-JOINT_MODEL_DIR = os.getenv("JOINT_MODEL_DIR", "app/models/joints")
-JOINT_NAMES = ["DIP", "DIPFirst", "PIP", "PIPFirst", "MCP", "MCPFirst", "MIP", "Radius", "Ulna"]
+JOINT_MODEL_DIR = resolve_backend_path(
+    os.getenv("JOINT_MODEL_DIR", "app/models/joints")
+)
+JOINT_NAMES = [
+    "DIP",
+    "DIPFirst",
+    "PIP",
+    "PIPFirst",
+    "MCP",
+    "MCPFirst",
+    "MIP",
+    "Radius",
+    "Ulna",
+]
 
 DEFAULT_AGE_MIN = 1.0
 DEFAULT_AGE_MAX = 228.0
@@ -849,22 +1162,31 @@ JOINT_IMG_SIZE = 1024
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-FRACTURE_MODEL_PATH = os.getenv(
-    "FRACTURE_MODEL_PATH",
-    "app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx",
+FRACTURE_MODEL_PATH = resolve_backend_path(
+    os.getenv(
+        "FRACTURE_MODEL_PATH",
+        "app/detector_of_bone/weight/yolov7-p6-bonefracture.onnx",
+    )
 )
-JOINT_RECOGNIZE_MODEL_PATH = os.getenv("JOINT_RECOGNIZE_MODEL_PATH", "app/models/recognize/best.pt")
+JOINT_RECOGNIZE_MODEL_PATH = resolve_backend_path(
+    os.getenv("JOINT_RECOGNIZE_MODEL_PATH", "app/models/recognize/best.pt")
+)
 AUTH_DB_PATH = os.getenv("AUTH_DB_PATH", "app/data/auth.db")
 PREDICTION_DB_PATH = os.getenv("PREDICTION_DB_PATH", "app/data/predictions.db")
 AUTH_TOKEN_EXPIRE_HOURS = int(os.getenv("AUTH_TOKEN_EXPIRE_HOURS", "24"))
 PBKDF2_ITERATIONS = int(os.getenv("PBKDF2_ITERATIONS", "210000"))
 LEGACY_ADMIN_REGISTER_KEY = os.getenv("ADMIN_REGISTER_KEY", "")
-LEGACY_ADMIN_SELF_REGISTER_ENABLED = os.getenv("ADMIN_SELF_REGISTER_ENABLED", "false").lower() == "true"
+LEGACY_ADMIN_SELF_REGISTER_ENABLED = (
+    os.getenv("ADMIN_SELF_REGISTER_ENABLED", "false").lower() == "true"
+)
 DOCTOR_REGISTER_KEY = os.getenv("DOCTOR_REGISTER_KEY", LEGACY_ADMIN_REGISTER_KEY)
-DOCTOR_SELF_REGISTER_ENABLED = os.getenv(
-    "DOCTOR_SELF_REGISTER_ENABLED",
-    "true" if LEGACY_ADMIN_SELF_REGISTER_ENABLED else "false",
-).lower() == "true"
+DOCTOR_SELF_REGISTER_ENABLED = (
+    os.getenv(
+        "DOCTOR_SELF_REGISTER_ENABLED",
+        "true" if LEGACY_ADMIN_SELF_REGISTER_ENABLED else "false",
+    ).lower()
+    == "true"
+)
 SUPER_ADMIN_INIT_PASSWORD = os.getenv("SUPER_ADMIN_INIT_PASSWORD", "").strip()
 DEFAULT_SUPER_ADMIN_USERNAME = "admin"
 AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "boneage_session")
@@ -872,7 +1194,9 @@ AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
 AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax").lower()
 ALLOWED_ORIGINS = [
     item.strip()
-    for item in os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173").split(",")
+    for item in os.getenv(
+        "ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173"
+    ).split(",")
     if item.strip()
 ]
 ALLOWED_ORIGIN_REGEX = os.getenv(
@@ -963,7 +1287,12 @@ def list_existing_fold_paths():
 # ----------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global models_ensemble, fracture_detector, joint_grader, joint_recognizer, dpv3_detector
+    global \
+        models_ensemble, \
+        fracture_detector, \
+        joint_grader, \
+        joint_recognizer, \
+        dpv3_detector
 
     init_auth_db()
     init_prediction_db()
@@ -988,7 +1317,9 @@ async def lifespan(app: FastAPI):
     for p in existing:
         try:
             m, age_min, age_max = load_fold_model(p)
-            models_ensemble.append({"model": m, "age_min": age_min, "age_max": age_max, "path": p})
+            models_ensemble.append(
+                {"model": m, "age_min": age_min, "age_max": age_max, "path": p}
+            )
             print(f"Loaded fold model: {p}, min={age_min}, max={age_max}")
         except Exception as exc:
             print(f"Error loading fold model {p}: {exc}")
@@ -1039,7 +1370,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS or ["127.0.0.1", "localhost"])
+app.add_middleware(
+    TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS or ["127.0.0.1", "localhost"]
+)
 
 
 @app.middleware("http")
@@ -1054,7 +1387,9 @@ async def add_security_headers(request: Request, call_next):
     # response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     # response.headers["Cross-Origin-Resource-Policy"] = "same-site"
     # CSP kept permissive enough for current inline static pages.
-    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; frame-ancestors 'none';"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; frame-ancestors 'none';"
+    )
     return response
 
 
@@ -1137,8 +1472,12 @@ def _create_sessions_table(conn: sqlite3.Connection, table_name: str = "sessions
         )
         """
     )
-    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_user_id ON {table_name}(user_id)")
-    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_expires_at ON {table_name}(expires_at)")
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_user_id ON {table_name}(user_id)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_expires_at ON {table_name}(expires_at)"
+    )
 
 
 def _table_sql(conn: sqlite3.Connection, table_name: str) -> str:
@@ -1159,11 +1498,15 @@ def _auth_role_migration_needed(conn: sqlite3.Connection) -> bool:
     if ROLE_DOCTOR not in sessions_sql or ROLE_SUPER_ADMIN not in sessions_sql:
         return True
 
-    legacy_users = conn.execute("SELECT COUNT(1) FROM users WHERE role = 'admin'").fetchone()
+    legacy_users = conn.execute(
+        "SELECT COUNT(1) FROM users WHERE role = 'admin'"
+    ).fetchone()
     if legacy_users and int(legacy_users[0]) > 0:
         return True
 
-    legacy_sessions = conn.execute("SELECT COUNT(1) FROM sessions WHERE role = 'admin'").fetchone()
+    legacy_sessions = conn.execute(
+        "SELECT COUNT(1) FROM sessions WHERE role = 'admin'"
+    ).fetchone()
     if legacy_sessions and int(legacy_sessions[0]) > 0:
         return True
     return False
@@ -1178,7 +1521,9 @@ def _set_autoincrement_seed(conn: sqlite3.Connection, table_name: str):
     max_row = conn.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table_name}").fetchone()
     max_id = int(max_row[0]) if max_row else 0
     conn.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table_name,))
-    conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", (table_name, max_id))
+    conn.execute(
+        "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", (table_name, max_id)
+    )
 
 
 def _migrate_auth_role_schema(conn: sqlite3.Connection):
@@ -1205,7 +1550,11 @@ def _migrate_auth_role_schema(conn: sqlite3.Connection):
                 row["username"],
                 ROLE_SUPER_ADMIN
                 if row["username"] == DEFAULT_SUPER_ADMIN_USERNAME
-                else (_normalize_role_value(row["role"]) if _is_valid_role(row["role"]) else ROLE_USER),
+                else (
+                    _normalize_role_value(row["role"])
+                    if _is_valid_role(row["role"])
+                    else ROLE_USER
+                ),
                 row["password_hash"],
                 row["password_salt"],
                 int(row["iterations"]),
@@ -1221,7 +1570,9 @@ def _migrate_auth_role_schema(conn: sqlite3.Connection):
     _set_autoincrement_seed(conn, "users")
     _create_sessions_table(conn, "sessions")
     conn.execute("PRAGMA foreign_keys = ON")
-    print("Auth role schema migrated to user/doctor/super_admin and sessions were cleared")
+    print(
+        "Auth role schema migrated to user/doctor/super_admin and sessions were cleared"
+    )
 
 
 def _generate_bootstrap_super_admin_password() -> str:
@@ -1244,9 +1595,13 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
             print(f"Promoted '{DEFAULT_SUPER_ADMIN_USERNAME}' to super_admin")
         return
 
-    bootstrap_password = SUPER_ADMIN_INIT_PASSWORD or _generate_bootstrap_super_admin_password()
+    bootstrap_password = (
+        SUPER_ADMIN_INIT_PASSWORD or _generate_bootstrap_super_admin_password()
+    )
     if not _validate_password_strength(bootstrap_password):
-        raise RuntimeError("SUPER_ADMIN_INIT_PASSWORD must include upper/lower letters and digits, minimum 8 chars")
+        raise RuntimeError(
+            "SUPER_ADMIN_INIT_PASSWORD must include upper/lower letters and digits, minimum 8 chars"
+        )
     salt_hex = secrets.token_hex(16)
     pw_hash = hash_password(bootstrap_password, salt_hex, PBKDF2_ITERATIONS)
     now_iso = _to_iso(_utc_now())
@@ -1265,7 +1620,9 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
         ),
     )
     if SUPER_ADMIN_INIT_PASSWORD:
-        print(f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}' from SUPER_ADMIN_INIT_PASSWORD")
+        print(
+            f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}' from SUPER_ADMIN_INIT_PASSWORD"
+        )
     else:
         print(
             f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}'. "
@@ -1284,8 +1641,10 @@ def _ensure_builtin_accounts(conn: sqlite3.Connection):
     for username, password, role in builtin:
         salt_hex = secrets.token_hex(16)
         pw_hash = hash_password(password, salt_hex, PBKDF2_ITERATIONS)
-        
-        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
         if not row:
             conn.execute(
                 """
@@ -1329,8 +1688,12 @@ def init_auth_db():
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_qa_owner_user_id ON qa_questions(owner_user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_qa_created_at ON qa_questions(created_at)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_qa_owner_user_id ON qa_questions(owner_user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_qa_created_at ON qa_questions(created_at)"
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS articles (
@@ -1369,8 +1732,12 @@ def init_prediction_db():
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_predictions_user_id ON predictions(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_predictions_timestamp ON predictions(timestamp)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_predictions_user_id ON predictions(user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_predictions_timestamp ON predictions(timestamp)"
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS bone_age_points (
@@ -1386,14 +1753,20 @@ def init_prediction_db():
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_bone_age_points_user_id ON bone_age_points(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_bone_age_points_point_time ON bone_age_points(point_time)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bone_age_points_user_id ON bone_age_points(user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bone_age_points_point_time ON bone_age_points(point_time)"
+        )
         conn.commit()
 
     # One-way migration from legacy predictions table in auth DB.
     try:
         with get_prediction_conn() as pred_conn:
-            pred_count = int(pred_conn.execute("SELECT COUNT(1) FROM predictions").fetchone()[0])
+            pred_count = int(
+                pred_conn.execute("SELECT COUNT(1) FROM predictions").fetchone()[0]
+            )
             if pred_count > 0:
                 return
 
@@ -1450,7 +1823,9 @@ def hash_password(password: str, salt_hex: str, iterations: int) -> str:
     return raw.hex()
 
 
-def verify_password(password: str, salt_hex: str, iterations: int, expected_hash: str) -> bool:
+def verify_password(
+    password: str, salt_hex: str, iterations: int, expected_hash: str
+) -> bool:
     computed = hash_password(password, salt_hex, iterations)
     return hmac.compare_digest(computed, expected_hash)
 
@@ -1521,14 +1896,20 @@ def _check_auth_rate_limit(request: Request, scope: str):
     while bucket and now - bucket[0] > AUTH_RATE_LIMIT_WINDOW_SECONDS:
         bucket.popleft()
     if len(bucket) >= AUTH_RATE_LIMIT_MAX_ATTEMPTS:
-        raise HTTPException(status_code=429, detail="Too many requests, please retry later")
+        raise HTTPException(
+            status_code=429, detail="Too many requests, please retry later"
+        )
     bucket.append(now)
 
 
 def _set_auth_cookie(response: Response, token: str, expires_at_iso: str):
     expires_dt = _from_iso(expires_at_iso)
     max_age = max(int((expires_dt - _utc_now()).total_seconds()), 0)
-    samesite = AUTH_COOKIE_SAMESITE if AUTH_COOKIE_SAMESITE in {"lax", "strict", "none"} else "lax"
+    samesite = (
+        AUTH_COOKIE_SAMESITE
+        if AUTH_COOKIE_SAMESITE in {"lax", "strict", "none"}
+        else "lax"
+    )
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=token,
@@ -1581,30 +1962,34 @@ def validate_image_content(image_bytes: bytes) -> np.ndarray:
     return img
 
 
-def preprocess_image_bytes(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0) -> bytes:
+def preprocess_image_bytes(
+    image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0
+) -> bytes:
     img = validate_image_content(image_bytes)
-    
+
     if contrast != 1.0 or brightness != 0.0:
         img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
-    
+
     ok, buffer = cv2.imencode(".jpg", img)
     if not ok:
         raise ValueError("Could not encode image")
     return buffer.tobytes()
 
-def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0):
+
+def preprocess_image(
+    image_bytes: bytes, brightness: float = 0.0, contrast: float = 1.0
+):
     img = validate_image_content(image_bytes)
-    
+
     # 应用图像增强: contrast (alpha) 和 brightness (beta)
     # 建议对比度 13.24
     if contrast != 1.0 or brightness != 0.0:
         img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
+
     # 步骤2: Resize 到 256×256
     img = cv2.resize(img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
-    
 
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     # img = cv2.resize(img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
@@ -1616,7 +2001,9 @@ def preprocess_image(image_bytes: bytes, brightness: float = 0.0, contrast: floa
     return torch.from_numpy(img).float()
 
 
-def predict_with_ensemble_tta_months(img_tensor: torch.Tensor, gender_tensor: torch.Tensor):
+def predict_with_ensemble_tta_months(
+    img_tensor: torch.Tensor, gender_tensor: torch.Tensor
+):
     if not models_ensemble:
         raise RuntimeError("No age model loaded")
 
@@ -1709,7 +2096,9 @@ def _parse_role_or_raise(raw_role: str, allowed_roles: set[str]) -> str:
     role = _normalize_role_value(raw_role)
     if role not in allowed_roles:
         allowed_display = "', '".join(sorted(allowed_roles))
-        raise HTTPException(status_code=400, detail=f"Role must be one of '{allowed_display}'")
+        raise HTTPException(
+            status_code=400, detail=f"Role must be one of '{allowed_display}'"
+        )
     return role
 
 
@@ -1722,11 +2111,16 @@ def auth_register(payload: RegisterRequest, request: Request, response: Response
     if not _validate_username(username):
         raise HTTPException(status_code=400, detail="Username format invalid")
     if not _validate_password_strength(payload.password):
-        raise HTTPException(status_code=400, detail="Password must include upper/lower letters and digits, minimum 8 chars")
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include upper/lower letters and digits, minimum 8 chars",
+        )
 
     if role == ROLE_DOCTOR:
         if not DOCTOR_SELF_REGISTER_ENABLED:
-            raise HTTPException(status_code=403, detail="Doctor self-register is disabled")
+            raise HTTPException(
+                status_code=403, detail="Doctor self-register is disabled"
+            )
         if DOCTOR_REGISTER_KEY and payload.admin_key != DOCTOR_REGISTER_KEY:
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -1924,7 +2318,9 @@ def _fetch_patient_user_or_raise(target_user_id: int) -> sqlite3.Row:
     if not row:
         raise HTTPException(status_code=404, detail="Target user not found")
     if _normalize_role_value(row["role"]) != ROLE_USER:
-        raise HTTPException(status_code=400, detail="Target user must be a personal user")
+        raise HTTPException(
+            status_code=400, detail="Target user must be a personal user"
+        )
     return row
 
 
@@ -1983,14 +2379,19 @@ def doctor_list_patient_users(request: Request):
 
 
 @app.post("/auth/users")
-def auth_create_user(payload: AccountCreateRequest, request: Request, response: Response):
+def auth_create_user(
+    payload: AccountCreateRequest, request: Request, response: Response
+):
     _require_super_admin(request)
     role = _parse_role_or_raise(payload.role, VALID_ROLES)
     username = payload.username.strip()
     if not _validate_username(username):
         raise HTTPException(status_code=400, detail="Username format invalid")
     if not _validate_password_strength(payload.password):
-        raise HTTPException(status_code=400, detail="Password must include upper/lower letters and digits, minimum 8 chars")
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include upper/lower letters and digits, minimum 8 chars",
+        )
 
     salt_hex = secrets.token_hex(16)
     pw_hash = hash_password(payload.password, salt_hex, PBKDF2_ITERATIONS)
@@ -2020,7 +2421,9 @@ def auth_create_user(payload: AccountCreateRequest, request: Request, response: 
 
 
 @app.patch("/auth/users/{target_user_id}/role")
-def auth_update_user_role(target_user_id: int, payload: AccountRoleUpdateRequest, request: Request):
+def auth_update_user_role(
+    target_user_id: int, payload: AccountRoleUpdateRequest, request: Request
+):
     session = _require_super_admin(request)
     new_role = _parse_role_or_raise(payload.role, VALID_ROLES)
 
@@ -2036,10 +2439,18 @@ def auth_update_user_role(target_user_id: int, payload: AccountRoleUpdateRequest
             raise HTTPException(status_code=404, detail="User not found")
 
         current_role = _normalize_role_value(row["role"])
-        if current_role == ROLE_SUPER_ADMIN and new_role != ROLE_SUPER_ADMIN and _count_super_admins(conn) <= 1:
-            raise HTTPException(status_code=400, detail="At least one super admin must remain")
+        if (
+            current_role == ROLE_SUPER_ADMIN
+            and new_role != ROLE_SUPER_ADMIN
+            and _count_super_admins(conn) <= 1
+        ):
+            raise HTTPException(
+                status_code=400, detail="At least one super admin must remain"
+            )
 
-        conn.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, target_user_id))
+        conn.execute(
+            "UPDATE users SET role = ? WHERE id = ?", (new_role, target_user_id)
+        )
         _invalidate_user_sessions(conn, target_user_id)
         conn.commit()
 
@@ -2051,7 +2462,9 @@ def auth_delete_user(target_user_id: int, request: Request):
     session = _require_super_admin(request)
 
     if int(session["user_id"]) == target_user_id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+        raise HTTPException(
+            status_code=400, detail="You cannot delete your own account"
+        )
 
     with get_auth_conn() as conn:
         row = conn.execute(
@@ -2063,11 +2476,15 @@ def auth_delete_user(target_user_id: int, request: Request):
 
         target_role = _normalize_role_value(row["role"])
         if target_role == ROLE_SUPER_ADMIN and _count_super_admins(conn) <= 1:
-            raise HTTPException(status_code=400, detail="At least one super admin must remain")
+            raise HTTPException(
+                status_code=400, detail="At least one super admin must remain"
+            )
 
         _delete_prediction_records_for_user(target_user_id)
         _invalidate_user_sessions(conn, target_user_id)
-        conn.execute("DELETE FROM qa_questions WHERE owner_user_id = ?", (target_user_id,))
+        conn.execute(
+            "DELETE FROM qa_questions WHERE owner_user_id = ?", (target_user_id,)
+        )
         conn.execute("DELETE FROM articles WHERE author_id = ?", (target_user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (target_user_id,))
         conn.commit()
@@ -2083,16 +2500,21 @@ class NotificationRequest(BaseModel):
     custom_template: Optional[str] = None
     report_data: Dict[str, Any]
 
+
 class ArticleCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
+
 
 @app.get("/articles")
 def list_articles(request: Request):
     session = _require_session(request)
     with get_auth_conn() as conn:
-        rows = conn.execute("SELECT id, author_name, title, content, created_at FROM articles ORDER BY id DESC").fetchall()
+        rows = conn.execute(
+            "SELECT id, author_name, title, content, created_at FROM articles ORDER BY id DESC"
+        ).fetchall()
     return {"success": True, "items": [dict(r) for r in rows]}
+
 
 @app.post("/articles")
 def create_article(payload: ArticleCreateRequest, request: Request):
@@ -2101,10 +2523,17 @@ def create_article(payload: ArticleCreateRequest, request: Request):
     with get_auth_conn() as conn:
         conn.execute(
             "INSERT INTO articles (author_id, author_name, title, content, created_at) VALUES (?, ?, ?, ?, ?)",
-            (session["user_id"], session["username"], payload.title, payload.content, now_iso)
+            (
+                session["user_id"],
+                session["username"],
+                payload.title,
+                payload.content,
+                now_iso,
+            ),
         )
         conn.commit()
     return {"success": True, "message": "Article created"}
+
 
 class QaCreateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
@@ -2139,12 +2568,18 @@ class DoctorAssistantRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
 
 
-def _fetch_prediction_row_for_session(pred_id: str, session: sqlite3.Row) -> sqlite3.Row:
+def _fetch_prediction_row_for_session(
+    pred_id: str, session: sqlite3.Row
+) -> sqlite3.Row:
     with get_prediction_conn() as conn:
-        row = conn.execute("SELECT * FROM predictions WHERE id = ?", (pred_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM predictions WHERE id = ?", (pred_id,)
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    if not _is_doctor_or_above(session["role"]) and int(row["user_id"]) != int(session["user_id"]):
+    if not _is_doctor_or_above(session["role"]) and int(row["user_id"]) != int(
+        session["user_id"]
+    ):
         raise HTTPException(status_code=403, detail="Access denied")
     return row
 
@@ -2161,7 +2596,9 @@ def _fit_bone_age_trend(points: List[sqlite3.Row]) -> Dict[str, Any]:
     x_rows = []
     y_vals = []
     for idx, p in enumerate(points):
-        elapsed_years = (float(p["point_time"]) - base_t) / (1000.0 * 60.0 * 60.0 * 24.0 * 365.25)
+        elapsed_years = (float(p["point_time"]) - base_t) / (
+            1000.0 * 60.0 * 60.0 * 24.0 * 365.25
+        )
         chrono = p["chronological_age_years"]
         if chrono is None:
             chrono = elapsed_years
@@ -2192,7 +2629,11 @@ def _fit_bone_age_trend(points: List[sqlite3.Row]) -> Dict[str, Any]:
     )
     return {
         "enough": True,
-        "coefficients": {"intercept": round(b0, 6), "time": round(b1, 6), "chronological_age": round(b2, 6)},
+        "coefficients": {
+            "intercept": round(b0, 6),
+            "time": round(b1, 6),
+            "chronological_age": round(b2, 6),
+        },
         "r2": round(r2, 6),
         "latex": latex,
         "base_timestamp": int(base_t),
@@ -2259,7 +2700,14 @@ def qa_create_question(payload: QaCreateRequest, request: Request):
             INSERT INTO qa_questions (owner_user_id, owner_username, question_text, image_base64, reply_text, created_at, updated_at)
             VALUES (?, ?, ?, ?, '', ?, ?)
             """,
-            (int(session["user_id"]), session["username"], text, image, now_iso, now_iso),
+            (
+                int(session["user_id"]),
+                session["username"],
+                text,
+                image,
+                now_iso,
+                now_iso,
+            ),
         )
         qid = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         conn.commit()
@@ -2314,7 +2762,9 @@ def qa_clear_questions(request: Request):
         if _is_doctor_or_above(role):
             cur = conn.execute("DELETE FROM qa_questions")
         else:
-            cur = conn.execute("DELETE FROM qa_questions WHERE owner_user_id = ?", (user_id,))
+            cur = conn.execute(
+                "DELETE FROM qa_questions WHERE owner_user_id = ?", (user_id,)
+            )
         conn.commit()
     return {"success": True, "deleted": int(cur.rowcount)}
 
@@ -2363,8 +2813,12 @@ async def predict_bone_age(
     file: UploadFile = File(...),
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
     height: Optional[float] = Form(None, description="Current height in cm"),
-    real_age_years: Optional[float] = Form(None, description="Chronological age in years"),
-    target_user_id: Optional[int] = Form(default=None, description="Personal user id for doctor-created predictions"),
+    real_age_years: Optional[float] = Form(
+        None, description="Chronological age in years"
+    ),
+    target_user_id: Optional[int] = Form(
+        default=None, description="Personal user id for doctor-created predictions"
+    ),
     preprocessing_enabled: bool = Form(False),
     brightness: float = Form(0.0),
     contrast: float = Form(1.0),
@@ -2449,9 +2903,20 @@ async def predict_bone_age(
         joint_semantic_13 = {}
         joint_rus_total_score = None
         joint_rus_details = []
+        rus_bone_age_years = None
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
+            joint_rus_total_score, joint_rus_details = calc_rus_score(
+                joint_semantic_13, gender_lower
+            )
+            if (
+                joint_rus_total_score is not None
+                and not math.isnan(joint_rus_total_score)
+                and not math.isinf(joint_rus_total_score)
+            ):
+                rus_bone_age_years = calc_bone_age_from_score(
+                    joint_rus_total_score, gender_lower
+                )
 
         recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
             recognized_joints_13.get("joints", {})
@@ -2459,10 +2924,12 @@ async def predict_bone_age(
 
         # 决定是否使用预处理参数
         if preprocessing_enabled:
-            img_tensor = preprocess_image(content, brightness=brightness, contrast=contrast).to(device)
+            img_tensor = preprocess_image(
+                content, brightness=brightness, contrast=contrast
+            ).to(device)
         else:
             img_tensor = preprocess_image(content).to(device)
-        
+
         pred_months = predict_with_ensemble_tta_months(img_tensor, gender_tensor)
         pred_years = pred_months / 12.0
 
@@ -2485,6 +2952,9 @@ async def predict_bone_age(
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_total_score": joint_rus_total_score,
+            "rus_bone_age_years": round(rus_bone_age_years, 2)
+            if rus_bone_age_years is not None
+            else None,
             "joint_rus_details": joint_rus_details,
             "joint_detect_13": recognized_joints_13,
             "rus_chn_details": report_details,
@@ -2499,7 +2969,6 @@ async def predict_bone_age(
 
         # Save to database if session exists
         if owner_user_id is not None:
-
             pred_id = str(uuid.uuid4())
             now_ts = int(time.time() * 1000)
 
@@ -2552,6 +3021,7 @@ async def predict_bone_age(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction failed: {exc}")
 
+
 @app.get("/predictions")
 def list_predictions(request: Request):
     session = _require_session(request)
@@ -2560,12 +3030,19 @@ def list_predictions(request: Request):
 
     with get_prediction_conn() as conn:
         if _is_doctor_or_above(role):
-            rows = conn.execute("SELECT id, user_id, timestamp, filename, predicted_age_years, gender FROM predictions ORDER BY timestamp DESC LIMIT 100").fetchall()
+            rows = conn.execute(
+                "SELECT id, user_id, timestamp, filename, predicted_age_years, gender FROM predictions ORDER BY timestamp DESC LIMIT 100"
+            ).fetchall()
         else:
-            rows = conn.execute("SELECT id, timestamp, filename, predicted_age_years, gender FROM predictions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,)).fetchall()
+            rows = conn.execute(
+                "SELECT id, timestamp, filename, predicted_age_years, gender FROM predictions WHERE user_id = ? ORDER BY timestamp DESC",
+                (user_id,),
+            ).fetchall()
     items = [{k: r[k] for k in r.keys()} for r in rows]
     if _is_doctor_or_above(role):
-        usernames = _fetch_usernames_by_ids([int(item["user_id"]) for item in items if item.get("user_id") is not None])
+        usernames = _fetch_usernames_by_ids(
+            [int(item["user_id"]) for item in items if item.get("user_id") is not None]
+        )
         for item in items:
             item["username"] = usernames.get(int(item["user_id"]), "")
 
@@ -2582,7 +3059,9 @@ def get_prediction_detail(pred_id: str, request: Request):
     data["timestamp"] = row["timestamp"]
     data["real_age_years"] = row["real_age_years"]
     data["user_id"] = int(row["user_id"])
-    data["foreign_object_detection"] = build_foreign_object_detection(data.get("anomalies"))
+    data["foreign_object_detection"] = build_foreign_object_detection(
+        data.get("anomalies")
+    )
     usernames = _fetch_usernames_by_ids([int(row["user_id"])])
     if usernames.get(int(row["user_id"])):
         data["username"] = usernames[int(row["user_id"])]
@@ -2608,20 +3087,51 @@ def update_prediction(pred_id: str, payload: PredictionUpdateRequest, request: R
     if update_fields["gender"] and update_fields["gender"] not in {"male", "female"}:
         raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
 
-    if update_fields["predicted_age_years"] is not None and update_fields["predicted_age_months"] is None:
-        update_fields["predicted_age_months"] = float(update_fields["predicted_age_years"]) * 12.0
+    if (
+        update_fields["predicted_age_years"] is not None
+        and update_fields["predicted_age_months"] is None
+    ):
+        update_fields["predicted_age_months"] = (
+            float(update_fields["predicted_age_years"]) * 12.0
+        )
 
     for key, val in update_fields.items():
         if val is not None:
             full_json[key] = val
-    full_json["foreign_object_detection"] = build_foreign_object_detection(full_json.get("anomalies"))
+    full_json["foreign_object_detection"] = build_foreign_object_detection(
+        full_json.get("anomalies")
+    )
 
-    new_filename = update_fields["filename"] if update_fields["filename"] is not None else row["filename"]
-    new_timestamp = int(update_fields["timestamp"]) if update_fields["timestamp"] is not None else int(row["timestamp"])
-    new_gender = update_fields["gender"] if update_fields["gender"] is not None else row["gender"]
-    new_months = float(update_fields["predicted_age_months"]) if update_fields["predicted_age_months"] is not None else float(row["predicted_age_months"])
-    new_years = float(update_fields["predicted_age_years"]) if update_fields["predicted_age_years"] is not None else float(row["predicted_age_years"])
-    new_real_age = update_fields["real_age_years"] if update_fields["real_age_years"] is not None else row["real_age_years"]
+    new_filename = (
+        update_fields["filename"]
+        if update_fields["filename"] is not None
+        else row["filename"]
+    )
+    new_timestamp = (
+        int(update_fields["timestamp"])
+        if update_fields["timestamp"] is not None
+        else int(row["timestamp"])
+    )
+    new_gender = (
+        update_fields["gender"]
+        if update_fields["gender"] is not None
+        else row["gender"]
+    )
+    new_months = (
+        float(update_fields["predicted_age_months"])
+        if update_fields["predicted_age_months"] is not None
+        else float(row["predicted_age_months"])
+    )
+    new_years = (
+        float(update_fields["predicted_age_years"])
+        if update_fields["predicted_age_years"] is not None
+        else float(row["predicted_age_years"])
+    )
+    new_real_age = (
+        update_fields["real_age_years"]
+        if update_fields["real_age_years"] is not None
+        else row["real_age_years"]
+    )
     new_height = (
         update_fields["predicted_adult_height"]
         if update_fields["predicted_adult_height"] is not None
@@ -2635,9 +3145,23 @@ def update_prediction(pred_id: str, payload: PredictionUpdateRequest, request: R
             SET filename = ?, timestamp = ?, predicted_age_months = ?, predicted_age_years = ?, gender = ?, real_age_years = ?, predicted_adult_height = ?, full_json = ?
             WHERE id = ?
             """,
-            (new_filename, new_timestamp, new_months, new_years, new_gender, new_real_age, new_height, json.dumps(full_json), pred_id),
+            (
+                new_filename,
+                new_timestamp,
+                new_months,
+                new_years,
+                new_gender,
+                new_real_age,
+                new_height,
+                json.dumps(full_json),
+                pred_id,
+            ),
         )
-        if update_fields["predicted_age_years"] is not None or update_fields["real_age_years"] is not None or update_fields["timestamp"] is not None:
+        if (
+            update_fields["predicted_age_years"] is not None
+            or update_fields["real_age_years"] is not None
+            or update_fields["timestamp"] is not None
+        ):
             conn.execute(
                 """
                 UPDATE bone_age_points
@@ -2665,11 +3189,15 @@ def delete_prediction(pred_id: str, request: Request):
 
 
 @app.get("/bone-age-points")
-def list_bone_age_points(request: Request, user_id: Optional[int] = Query(default=None)):
+def list_bone_age_points(
+    request: Request, user_id: Optional[int] = Query(default=None)
+):
     session = _require_session(request)
     uid = int(session["user_id"])
     role = str(session["role"])
-    target_user_id = user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
+    target_user_id = (
+        user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
+    )
 
     with get_prediction_conn() as conn:
         rows = conn.execute(
@@ -2725,19 +3253,27 @@ async def create_bone_age_point(request: Request):
 
     bone_age_years = _to_optional_float(raw_bone_age_years)
     if bone_age_years is None or bone_age_years <= 0:
-        raise HTTPException(status_code=400, detail="bone_age_years must be a valid number > 0")
+        raise HTTPException(
+            status_code=400, detail="bone_age_years must be a valid number > 0"
+        )
     if bone_age_years > 30:
         raise HTTPException(status_code=400, detail="bone_age_years must be <= 30")
 
     chronological_age_years = _to_optional_float(raw_chronological_age_years)
     if chronological_age_years is not None and chronological_age_years > 30:
-        raise HTTPException(status_code=400, detail="chronological_age_years must be <= 30")
+        raise HTTPException(
+            status_code=400, detail="chronological_age_years must be <= 30"
+        )
 
     parsed_user_id = _to_optional_int(raw_user_id)
     parsed_point_time = _to_optional_int(raw_point_time)
     note = str(raw_note or "").strip()[:500]
 
-    target_user_id = parsed_user_id if (_is_doctor_or_above(role) and parsed_user_id is not None) else uid
+    target_user_id = (
+        parsed_user_id
+        if (_is_doctor_or_above(role) and parsed_user_id is not None)
+        else uid
+    )
     now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
     point_time = parsed_point_time if parsed_point_time is not None else now_ts
     now_iso = _to_iso(_utc_now())
@@ -2748,7 +3284,14 @@ async def create_bone_age_point(request: Request):
             INSERT INTO bone_age_points (user_id, point_time, bone_age_years, chronological_age_years, source, prediction_id, note, created_at)
             VALUES (?, ?, ?, ?, 'manual', NULL, ?, ?)
             """,
-            (target_user_id, point_time, bone_age_years, chronological_age_years, note, now_iso),
+            (
+                target_user_id,
+                point_time,
+                bone_age_years,
+                chronological_age_years,
+                note,
+                now_iso,
+            ),
         )
         point_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         conn.commit()
@@ -2763,7 +3306,9 @@ def delete_bone_age_point(point_id: int, request: Request):
     role = str(session["role"])
 
     with get_prediction_conn() as conn:
-        row = conn.execute("SELECT user_id FROM bone_age_points WHERE id = ?", (point_id,)).fetchone()
+        row = conn.execute(
+            "SELECT user_id FROM bone_age_points WHERE id = ?", (point_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Point not found")
         if not _is_doctor_or_above(role) and int(row["user_id"]) != uid:
@@ -2779,7 +3324,9 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
     session = _require_session(request)
     uid = int(session["user_id"])
     role = str(session["role"])
-    target_user_id = user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
+    target_user_id = (
+        user_id if (_is_doctor_or_above(role) and user_id is not None) else uid
+    )
 
     with get_prediction_conn() as conn:
         rows = conn.execute(
@@ -2800,16 +3347,23 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
 async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
     _require_doctor(request)
     if not DEEPSEEK_API_KEY:
-        raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured")
+        raise HTTPException(
+            status_code=503, detail="DEEPSEEK_API_KEY is not configured"
+        )
 
     context_chunks: List[str] = []
     if payload.context:
         context_chunks.append(f"额外上下文: {payload.context}")
     if payload.prediction_id:
         with get_prediction_conn() as conn:
-            row = conn.execute("SELECT full_json FROM predictions WHERE id = ?", (payload.prediction_id,)).fetchone()
+            row = conn.execute(
+                "SELECT full_json FROM predictions WHERE id = ?",
+                (payload.prediction_id,),
+            ).fetchone()
         if row:
-            context_chunks.append(f"预测记录[{payload.prediction_id}]: {row['full_json'][:4000]}")
+            context_chunks.append(
+                f"预测记录[{payload.prediction_id}]: {row['full_json'][:4000]}"
+            )
 
     system_prompt = (
         "你是骨龄辅助诊断AI，请输出临床可用、谨慎、结构化建议。"
@@ -2847,19 +3401,19 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
 
             for line in resp.iter_lines():
                 if line:
-                    line_text = line.decode('utf-8')
-                    if line_text.startswith('data: '):
+                    line_text = line.decode("utf-8")
+                    if line_text.startswith("data: "):
                         data_str = line_text[6:]
-                        if data_str == '[DONE]':
+                        if data_str == "[DONE]":
                             yield "data: [DONE]\n\n"
                             break
                         try:
                             data = json.loads(data_str)
-                            choices = data.get('choices', [])
+                            choices = data.get("choices", [])
                             if not choices:
                                 continue
-                            delta = choices[0].get('delta', {})
-                            content = delta.get('content', '')
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content", "")
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
                         except json.JSONDecodeError:
@@ -2879,7 +3433,9 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
     """患者智能问诊接口：任意已登录用户均可调用，prompt 偏向健康科普与就医指导。"""
     _require_session(request)
     if not DEEPSEEK_API_KEY:
-        raise HTTPException(status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥")
+        raise HTTPException(
+            status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥"
+        )
 
     system_prompt = (
         "你是一位友好、专业的骨龄与儿童生长发育健康顾问。"
@@ -2917,19 +3473,19 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
 
             for line in resp.iter_lines():
                 if line:
-                    line_text = line.decode('utf-8')
-                    if line_text.startswith('data: '):
+                    line_text = line.decode("utf-8")
+                    if line_text.startswith("data: "):
                         data_str = line_text[6:]
-                        if data_str == '[DONE]':
+                        if data_str == "[DONE]":
                             yield "data: [DONE]\n\n"
                             break
                         try:
                             data = json.loads(data_str)
-                            choices = data.get('choices', [])
+                            choices = data.get("choices", [])
                             if not choices:
                                 continue
-                            delta = choices[0].get('delta', {})
-                            content = delta.get('content', '')
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content", "")
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
                         except json.JSONDecodeError:
@@ -2950,7 +3506,9 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
     """患者智能问诊接口（支持图片）：用户可上传X光片等图片进行问诊"""
     _require_session(request)
     if not DEEPSEEK_API_KEY:
-        raise HTTPException(status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥")
+        raise HTTPException(
+            status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥"
+        )
 
     system_prompt = (
         "你是一位友好、专业的骨龄与儿童生长发育健康顾问。"
@@ -2971,12 +3529,9 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
 
     if payload.image_base64:
         image_data = payload.image_base64
-        if not image_data.startswith('data:'):
+        if not image_data.startswith("data:"):
             image_data = f"data:image/jpeg;base64,{image_data}"
-        user_content.append({
-            "type": "image_url",
-            "image_url": {"url": image_data}
-        })
+        user_content.append({"type": "image_url", "image_url": {"url": image_data}})
 
     async def generate_stream():
         try:
@@ -3004,19 +3559,19 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
 
             for line in resp.iter_lines():
                 if line:
-                    line_text = line.decode('utf-8')
-                    if line_text.startswith('data: '):
+                    line_text = line.decode("utf-8")
+                    if line_text.startswith("data: "):
                         data_str = line_text[6:]
-                        if data_str == '[DONE]':
+                        if data_str == "[DONE]":
                             yield "data: [DONE]\n\n"
                             break
                         try:
                             data = json.loads(data_str)
-                            choices = data.get('choices', [])
+                            choices = data.get("choices", [])
                             if not choices:
                                 continue
-                            delta = choices[0].get('delta', {})
-                            content = delta.get('content', '')
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content", "")
                             if content:
                                 yield f"data: {json.dumps({'content': content})}\n\n"
                         except json.JSONDecodeError:
@@ -3046,13 +3601,13 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
 #     try:
 #         content = await file.read()
 
+
 #         recognized_joints_13 = {}
 #         try:
 #             recognized_joints_13 = joint_recognizer.recognize_13(content)
 #         except Exception as rec_exc:
 #             print(f"Small joint recognize failed: {rec_exc}")
 @app.post("/joint-grading")
-
 async def joint_grading_predict(
     file: UploadFile = File(...),
     gender: str = Form(..., description="Gender: 'male' or 'female'"),
@@ -3075,13 +3630,13 @@ async def joint_grading_predict(
 
         if preprocessing_enabled:
             try:
-                processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+                processed_content = preprocess_image_bytes(
+                    content, brightness=brightness, contrast=contrast
+                )
             except Exception:
                 processed_content = content
         else:
             processed_content = content
-        with open("check_this_image.jpg", "wb") as f:
-            f.write(processed_content)
 
         recognized_joints_13 = {
             "hand_side": "unknown",
@@ -3089,7 +3644,7 @@ async def joint_grading_predict(
             "joints": {},
             "plot_image_base64": None,
             "dpv3_enhanced": False,
-            "dpv3_info": None
+            "dpv3_info": None,
         }
 
         if use_dpv3 and dpv3_detector:
@@ -3098,248 +3653,73 @@ async def joint_grading_predict(
                 img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 if img_bgr is not None:
                     dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
-                    if dpv3_results.get('success'):
+                    if dpv3_results.get("success"):
                         recognized_joints_13["dpv3_enhanced"] = True
 
                         radius_region = None
                         ulna_region = None
-                        for region in dpv3_results.get('regions', []):
-                            label = region.get('label', 'Unknown')
-                            if label == 'Radius':
+                        for region in dpv3_results.get("regions", []):
+                            label = region.get("label", "Unknown")
+                            if label == "Radius":
                                 radius_region = region
-                            elif label == 'Ulna':
+                            elif label == "Ulna":
                                 ulna_region = region
 
                         if radius_region and ulna_region:
-                            radius_x = radius_region.get('centroid', (0, 0))[0]
-                            ulna_x = ulna_region.get('centroid', (0, 0))[0]
+                            radius_x = radius_region.get("centroid", (0, 0))[0]
+                            ulna_x = ulna_region.get("centroid", (0, 0))[0]
                             if radius_x > ulna_x:
-                                hand_side = 'left'
+                                hand_side = "left"
                             else:
-                                hand_side = 'right'
+                                hand_side = "right"
                         else:
-                            hand_side = dpv3_results.get('hand_side', 'unknown')
+                            hand_side = dpv3_results.get("hand_side", "unknown")
 
                         recognized_joints_13["dpv3_info"] = {
                             "hand_side": hand_side,
-                            "total_regions": dpv3_results.get('total_regions'),
-                            "yolo_count": dpv3_results.get('yolo_count'),
-                            "bfs_count": dpv3_results.get('bfs_count'),
-                            "best_gray_range": dpv3_results.get('best_gray_range'),
-                            "merged_blocks": dpv3_results.get('merged_blocks')
+                            "total_regions": dpv3_results.get("total_regions"),
+                            "yolo_count": dpv3_results.get("yolo_count"),
+                            "bfs_count": dpv3_results.get("bfs_count"),
+                            "best_gray_range": dpv3_results.get("best_gray_range"),
+                            "merged_blocks": dpv3_results.get("merged_blocks"),
                         }
 
-                        finger_labels_en = ['First', 'Second', 'Third', 'Fourth', 'Fifth']
-                        finger_labels_cn = ['拇指', '食指', '中指', '环指', '小指']
-
-                        if hand_side == 'left':
-                            finger_order = finger_labels_en
-                        else:
-                            finger_order = list(reversed(finger_labels_en))
-
-                        finger_regions_map = {f: [] for f in finger_labels_en}
-                        finger_cn_map = dict(zip(finger_labels_en, finger_labels_cn))
-                        carpal_regions = []
-
-                        thumb_regions = []
-                        bone_type_regions = {
-                            'MCP': [],
-                            'ProximalPhalanx': [],
-                            'MiddlePhalanx': [],
-                            'DistalPhalanx': [],
-                        }
-
-                        for region in dpv3_results.get('regions', []):
-                            label = region.get('label', 'Unknown')
-                            if label in ['Radius', 'Ulna']:
-                                carpal_regions.append(region)
-                            elif label == 'MCPFirst':
-                                thumb_regions.append(region)
-                            elif label in bone_type_regions:
-                                bone_type_regions[label].append(region)
-
-                        remaining_regions = [
-                            region
-                            for regions in bone_type_regions.values()
-                            for region in regions
-                        ]
-                        #调试
-                        print(remaining_regions)
-
-                        if not thumb_regions and remaining_regions:
-                            img_width = img_bgr.shape[1]
-                            thumb_threshold = img_width * 0.85 if hand_side == 'left' else img_width * 0.15
-                            if hand_side == 'left':
-                                thumb_regions = [
-                                    r for r in remaining_regions
-                                    if r.get('centroid', (0, 0))[0] > thumb_threshold
-                                ]
-                            else:
-                                thumb_regions = [
-                                    r for r in remaining_regions
-                                    if r.get('centroid', (0, 0))[0] < thumb_threshold
-                                ]
-
-                            if thumb_regions:
-                                thumb_region_ids = {id(r) for r in thumb_regions}
-                                for label, regions in bone_type_regions.items():
-                                    bone_type_regions[label] = [
-                                        r for r in regions if id(r) not in thumb_region_ids
-                                    ]
-
-                        finger_regions_map['First'].extend(thumb_regions)
-
-                        other_finger_labels = ['Second', 'Third', 'Fourth', 'Fifth']
-                        for label, regions in bone_type_regions.items():
-                            if not regions:
-                                continue
-
-                            sorted_by_x = sorted(regions, key=lambda r: r.get('centroid', (0, 0))[0])
-                            if hand_side == 'left':
-                                sorted_by_x.reverse()
-
-                            primary_regions = sorted_by_x[:len(other_finger_labels)]
-                            overflow_regions = sorted_by_x[len(other_finger_labels):]
-
-                            for finger, region in zip(other_finger_labels, primary_regions):
-                                finger_regions_map[finger].append(region)
-
-                            # If a detector emits duplicate boxes for the same bone type,
-                            # attach extras to the nearest finger by x-position instead of
-                            # blindly slicing all bones together into one finger bucket.
-                            if overflow_regions:
-                                finger_targets = [
-                                    (finger, region.get('centroid', (0, 0))[0])
-                                    for finger, region in zip(other_finger_labels, primary_regions)
-                                ]
-                                for overflow_region in overflow_regions:
-                                    overflow_x = overflow_region.get('centroid', (0, 0))[0]
-                                    nearest_finger = min(
-                                        finger_targets,
-                                        key=lambda item: abs(item[1] - overflow_x)
-                                    )[0]
-                                    finger_regions_map[nearest_finger].append(overflow_region)
-
-                        joints = {}
-                        ordered_joints = []
-                        joint_index = 0
-
-                        for finger in finger_order:
-                            finger_regions = finger_regions_map[finger]
-                            if not finger_regions:
-                                continue
-
-                            sorted_regions = sorted(
-                                finger_regions,
-                                key=lambda r: (r.get('centroid', (0, 0))[1], r.get('centroid', (0, 0))[0])
+                        joints, ordered_joints, hand_side = (
+                            rename_dpv3_regions_to_named_joints(
+                                dpv3_results.get("regions", []),
+                                img_bgr.shape[:2],
+                                hand_side,
                             )
-
-                            for region in sorted_regions:
-                                label = region.get('label', 'Unknown')
-                                label_cn = region.get('label_cn', label)
-                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-                                x1, y1, x2, y2 = bbox_coords
-
-                                if label == 'MCPFirst':
-                                    grade_label = 'MCPFirst'
-                                elif label == 'ProximalPhalanx':
-                                    grade_label = f'PIP{finger}'
-                                elif label == 'DistalPhalanx':
-                                    grade_label = f'DIP{finger}'
-                                elif label == 'MiddlePhalanx':
-                                    grade_label = f'MIP{finger}'
-                                elif label == 'MCP':
-                                    grade_label = f'MCP{finger}'
-                                else:
-                                    grade_label = label
-
-                                joint_data = {
-                                    "type": label_cn,
-                                    "label": grade_label,
-                                    "yolo_label": label,
-                                    "finger": finger,
-                                    "finger_cn": finger_cn_map[finger],
-                                    "order": joint_index,
-                                    "score": round(region.get('confidence', 0.5), 4),
-                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
-                                    "source": region.get('source', 'unknown'),
-                                    "coord": [
-                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
-                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
-                                        round((x2 - x1) / img_bgr.shape[1], 4),
-                                        round((y2 - y1) / img_bgr.shape[0], 4)
-                                    ]
-                                }
-
-                                if grade_label in joints:
-                                    idx = 1
-                                    while f"{grade_label}_{idx}" in joints:
-                                        idx += 1
-                                    joint_key = f"{grade_label}_{idx}"
-                                else:
-                                    joint_key = grade_label
-
-                                joints[joint_key] = joint_data
-                                ordered_joints.append(joint_data)
-                                joint_index += 1
-
-                        if carpal_regions:
-                            sorted_carpal = sorted(
-                                carpal_regions,
-                                key=lambda r: r.get('centroid', (0, 0))[1]
-                            )
-
-                            for region in sorted_carpal:
-                                label = region.get('label', 'Unknown')
-                                label_cn = region.get('label_cn', label)
-                                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-                                x1, y1, x2, y2 = bbox_coords
-
-                                joint_data = {
-                                    "type": label_cn,
-                                    "label": label,
-                                    "finger": 'Wrist',
-                                    "finger_cn": '腕骨',
-                                    "order": joint_index,
-                                    "score": round(region.get('confidence', 0.5), 4),
-                                    "bbox_xyxy": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
-                                    "source": region.get('source', 'unknown'),
-                                    "coord": [
-                                        round(region['centroid'][0] / img_bgr.shape[1], 4),
-                                        round(region['centroid'][1] / img_bgr.shape[0], 4),
-                                        round((x2 - x1) / img_bgr.shape[1], 4),
-                                        round((y2 - y1) / img_bgr.shape[0], 4)
-                                    ]
-                                }
-
-                                if label in joints:
-                                    idx = 1
-                                    while f"{label}_{idx}" in joints:
-                                        idx += 1
-                                    joint_key = f"{label}_{idx}"
-                                else:
-                                    joint_key = label
-
-                                joints[joint_key] = joint_data
-                                ordered_joints.append(joint_data)
-                                joint_index += 1
+                        )
 
                         recognized_joints_13["detected_count"] = len(joints)
                         recognized_joints_13["hand_side"] = hand_side
                         recognized_joints_13["joints"] = joints
                         recognized_joints_13["ordered_joints"] = ordered_joints
-                        recognized_joints_13["finger_order"] = finger_order
-                        print(f"✅ DP V3 enhanced detection: {recognized_joints_13['detected_count']} bones detected")
+                        recognized_joints_13["finger_order"] = (
+                            FINGER_LABELS_EN
+                            if hand_side == "left"
+                            else list(reversed(FINGER_LABELS_EN))
+                        )
+                        recognized_joints_13["rus_13_joints"] = (
+                            standardize_detected_joints_to_rus(joints)
+                        )
+                        print(
+                            f"✅ DP V3 enhanced detection: {recognized_joints_13['detected_count']} bones detected"
+                        )
             except Exception as dpv3_exc:
                 print(f"DP V3 detection failed: {dpv3_exc}")
                 import traceback
+
                 traceback.print_exc()
 
         if not recognized_joints_13.get("dpv3_enhanced"):
             joints = {}
             if joint_recognizer:
                 try:
-                    recognized_joints_13 = joint_recognizer.recognize_13(processed_content)
+                    recognized_joints_13 = joint_recognizer.recognize_13(
+                        processed_content
+                    )
                     recognized_joints_13["dpv3_enhanced"] = False
                     recognized_joints_13["dpv3_info"] = None
                 except Exception as rec_exc:
@@ -3365,46 +3745,35 @@ async def joint_grading_predict(
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
-            if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
+            joint_rus_total_score, joint_rus_details = calc_rus_score(
+                joint_semantic_13, gender_lower
+            )
+            if joint_rus_total_score is not None and (
+                math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)
+            ):
                 joint_rus_total_score = 0.0
 
         if joint_recognizer and joint_grades:
             try:
                 nparr = np.frombuffer(processed_content, np.uint8)
                 img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                orig_h, orig_w = img_bgr_orig.shape[:2]
-
-                img_bgr = cv2.resize(img_bgr_orig, (joint_recognizer.imgsz, joint_recognizer.imgsz))
-                scale_x = joint_recognizer.imgsz / orig_w
-                scale_y = joint_recognizer.imgsz / orig_h
-
-                scaled_joints = {}
-                for joint_key, joint_data in recognized_joints_13.get("joints", {}).items():
-                    bbox = joint_data.get("bbox_xyxy", [0, 0, 0, 0])
-                    x1, y1, x2, y2 = bbox
-                    scaled_joints[joint_key] = {
-                        **joint_data,
-                        "bbox_xyxy": [
-                            x1 * scale_x,
-                            y1 * scale_y,
-                            x2 * scale_x,
-                            y2 * scale_y
-                        ]
-                    }
-
                 new_plot = joint_recognizer._render_with_plt(
-                    img_bgr,
-                    scaled_joints,
+                    img_bgr_orig,
+                    recognized_joints_13.get("joints", {}),
                     recognized_joints_13.get("hand_side", "unknown"),
-                    grades=joint_grades
+                    grades=joint_grades,
                 )
                 if new_plot:
                     recognized_joints_13["plot_image_base64"] = new_plot
             except Exception as plot_exc:
                 print(f"Re-rendering plot with grades failed: {plot_exc}")
                 import traceback
+
                 traceback.print_exc()
+
+        recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
+            recognized_joints_13.get("joints", {})
+        )
 
         return {
             "success": True,
@@ -3415,12 +3784,15 @@ async def joint_grading_predict(
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_total_score": joint_rus_total_score,
             "joint_rus_details": joint_rus_details,
-            "detection_algorithm": "dpv3" if recognized_joints_13.get("dpv3_enhanced") else "yolo"
+            "detection_algorithm": "dpv3"
+            if recognized_joints_13.get("dpv3_enhanced")
+            else "yolo",
         }
     except HTTPException:
         raise
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"小关节分级诊断失败: {exc}")
 
@@ -3459,7 +3831,9 @@ async def joint_dpv3_detect(
 
         if preprocessing_enabled:
             try:
-                processed_content = preprocess_image_bytes(content, brightness=brightness, contrast=contrast)
+                processed_content = preprocess_image_bytes(
+                    content, brightness=brightness, contrast=contrast
+                )
             except Exception:
                 processed_content = content
         else:
@@ -3473,25 +3847,16 @@ async def joint_dpv3_detect(
         dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
 
         detected_joints = {}
-        if dpv3_results.get('success'):
-            h, w = img_bgr.shape[:2]
-            for region in dpv3_results.get('regions', []):
-                label = region.get('label', 'Unknown')
-                label_cn = region.get('label_cn', label)
-                bbox_coords = region.get('bbox_coords', [0, 0, 0, 0])
-
-                detected_joints[label_cn] = {
-                    "type": label_cn,
-                    "score": region.get('confidence', 0.5),
-                    "bbox_xyxy": list(bbox_coords),
-                    "source": region.get('source', 'unknown'),
-                    "coord": [
-                        region['centroid'][0] / w,
-                        region['centroid'][1] / h,
-                        (bbox_coords[2] - bbox_coords[0]) / w,
-                        (bbox_coords[3] - bbox_coords[1]) / h
-                    ]
-                }
+        ordered_joints = []
+        resolved_hand_side = dpv3_results.get("hand_side", "unknown")
+        if dpv3_results.get("success"):
+            detected_joints, ordered_joints, resolved_hand_side = (
+                rename_dpv3_regions_to_named_joints(
+                    dpv3_results.get("regions", []),
+                    img_bgr.shape[:2],
+                    resolved_hand_side,
+                )
+            )
 
         joint_grades = {}
         try:
@@ -3512,19 +3877,22 @@ async def joint_dpv3_detect(
         joint_rus_details = []
         if joint_grades:
             joint_semantic_13 = align_joint_semantics(joint_grades)
-            joint_rus_total_score, joint_rus_details = calc_rus_score(joint_semantic_13, gender_lower)
-            if joint_rus_total_score is not None and (math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)):
+            joint_rus_total_score, joint_rus_details = calc_rus_score(
+                joint_semantic_13, gender_lower
+            )
+            if joint_rus_total_score is not None and (
+                math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)
+            ):
                 joint_rus_total_score = 0.0
 
         plot_image_base64 = None
         if joint_recognizer and detected_joints:
             try:
-                img_resized = cv2.resize(img_bgr, (joint_recognizer.imgsz, joint_recognizer.imgsz))
                 plot_image_base64 = joint_recognizer._render_with_plt(
-                    img_resized,
+                    img_bgr,
                     detected_joints,
-                    dpv3_results.get('hand_side', 'unknown'),
-                    grades=joint_grades
+                    resolved_hand_side,
+                    grades=joint_grades,
                 )
             except Exception as plot_exc:
                 print(f"DP V3 plot rendering failed: {plot_exc}")
@@ -3534,32 +3902,34 @@ async def joint_dpv3_detect(
             "filename": file.filename,
             "gender": gender_lower,
             "joint_detect_13": {
-                "hand_side": dpv3_results.get('hand_side', 'unknown'),
+                "hand_side": resolved_hand_side,
                 "detected_count": len(detected_joints),
                 "joints": detected_joints,
+                "ordered_joints": ordered_joints,
                 "rus_13_joints": standardize_detected_joints_to_rus(detected_joints),
                 "plot_image_base64": plot_image_base64,
                 "dpv3_enhanced": True,
                 "dpv3_info": {
-                    "yolo_count": dpv3_results.get('yolo_count'),
-                    "bfs_count": dpv3_results.get('bfs_count'),
-                    "total_regions": dpv3_results.get('total_regions'),
-                    "best_gray_range": dpv3_results.get('best_gray_range'),
-                    "merged_blocks": dpv3_results.get('merged_blocks'),
-                    "initial_gray_range": dpv3_results.get('initial_gray_range')
-                }
+                    "yolo_count": dpv3_results.get("yolo_count"),
+                    "bfs_count": dpv3_results.get("bfs_count"),
+                    "total_regions": dpv3_results.get("total_regions"),
+                    "best_gray_range": dpv3_results.get("best_gray_range"),
+                    "merged_blocks": dpv3_results.get("merged_blocks"),
+                    "initial_gray_range": dpv3_results.get("initial_gray_range"),
+                },
             },
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_total_score": joint_rus_total_score,
             "joint_rus_details": joint_rus_details,
-            "detection_algorithm": "dpv3"
+            "detection_algorithm": "dpv3",
         }
 
     except HTTPException:
         raise
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"DP V3小关节检测失败: {exc}")
 
@@ -3599,9 +3969,9 @@ async def formula_calculation(
                         joint_box.get("x", 0),
                         joint_box.get("y", 0),
                         joint_box.get("x", 0) + joint_box.get("width", 0),
-                        joint_box.get("y", 0) + joint_box.get("height", 0)
+                        joint_box.get("y", 0) + joint_box.get("height", 0),
                     ],
-                    "score": 1.0
+                    "score": 1.0,
                 }
 
         # 调用关节分级模型
@@ -3621,14 +3991,18 @@ async def formula_calculation(
         # 语义对齐和RUS评分计算
         joint_semantic_13 = align_joint_semantics(joint_grades)
         total_score, rus_details = calc_rus_score(joint_semantic_13, gender_lower)
-        if total_score is not None and (math.isnan(total_score) or math.isinf(total_score)):
+        if total_score is not None and (
+            math.isnan(total_score) or math.isinf(total_score)
+        ):
             total_score = 0.0
 
         # 使用RUS-CHN公式计算骨龄
         bone_age = calc_bone_age_from_score(total_score, gender_lower)
 
         # 计算置信度（基于关节数量和质量）
-        joint_count = len([j for j in joint_grades.values() if j.get("grade_raw") is not None])
+        joint_count = len(
+            [j for j in joint_grades.values() if j.get("grade_raw") is not None]
+        )
         confidence = (joint_count / len(RUS_13)) * 100
 
         # 构建返回结果
@@ -3641,25 +4015,40 @@ async def formula_calculation(
             "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
             "formula_expression": get_formula_expression(gender_lower),
             "total_score": total_score,
-            "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
-            "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
+            "bone_age": round(bone_age, 2)
+            if (
+                bone_age is not None
+                and not math.isnan(bone_age)
+                and not math.isinf(bone_age)
+            )
+            else 0.0,
+            "confidence": round(confidence, 1)
+            if (
+                confidence is not None
+                and not math.isnan(confidence)
+                and not math.isinf(confidence)
+            )
+            else 0.0,
             "joint_grades": joint_grades,
             "joint_semantic_13": joint_semantic_13,
             "joint_rus_details": rus_details,
             "joint_count": joint_count,
-            "total_joints": len(RUS_13)
+            "total_joints": len(RUS_13),
         }
     except HTTPException:
         raise
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"公式法计算失败: {exc}")
 
 
 class ManualGradeRequest(BaseModel):
     gender: str = Field(..., description="Gender: 'male' or 'female'")
-    grades: Dict[str, int] = Field(..., description="Joint grades, e.g., {'Radius': 5, 'Ulna': 4, ...}")
+    grades: Dict[str, int] = Field(
+        ..., description="Joint grades, e.g., {'Radius': 5, 'Ulna': 4, ...}"
+    )
 
 
 @app.post("/manual-grade-calculation")
@@ -3673,7 +4062,7 @@ async def manual_grade_calculation(request: ManualGradeRequest):
         raise HTTPException(status_code=400, detail="Gender must be 'male' or 'female'")
 
     grades = request.grades
-    
+
     joint_semantic_13 = {}
     for joint_name in RUS_13:
         grade_raw = grades.get(joint_name)
@@ -3707,13 +4096,27 @@ async def manual_grade_calculation(request: ManualGradeRequest):
         "formula_description": "基于13个关键小关节的成熟度评分计算骨龄，使用RUS-CHN标准",
         "formula_expression": get_formula_expression(gender_lower),
         "total_score": total_score,
-        "bone_age": round(bone_age, 2) if (bone_age is not None and not math.isnan(bone_age) and not math.isinf(bone_age)) else 0.0,
-        "confidence": round(confidence, 1) if (confidence is not None and not math.isnan(confidence) and not math.isinf(confidence)) else 0.0,
-        "joint_grades": {k: {"grade_raw": v} for k, v in grades.items() if v is not None},
+        "bone_age": round(bone_age, 2)
+        if (
+            bone_age is not None
+            and not math.isnan(bone_age)
+            and not math.isinf(bone_age)
+        )
+        else 0.0,
+        "confidence": round(confidence, 1)
+        if (
+            confidence is not None
+            and not math.isnan(confidence)
+            and not math.isinf(confidence)
+        )
+        else 0.0,
+        "joint_grades": {
+            k: {"grade_raw": v} for k, v in grades.items() if v is not None
+        },
         "joint_semantic_13": joint_semantic_13,
         "joint_rus_details": rus_details,
         "joint_count": joint_count,
-        "total_joints": len(RUS_13)
+        "total_joints": len(RUS_13),
     }
 
 

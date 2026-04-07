@@ -226,6 +226,16 @@ const PredictTab: React.FC<PredictTabProps> = ({
                                 </div>
                             )}
 
+                            {result.rus_bone_age_years ? (
+                                <div className={styles.metricCard}>
+                                    <span>RUS-CHN 骨龄</span>
+                                    <strong>{result.rus_bone_age_years.toFixed(1)} <small>岁</small></strong>
+                                    {result.joint_rus_total_score && (
+                                        <div className={styles.subtext}>总分: {result.joint_rus_total_score}</div>
+                                    )}
+                                </div>
+                            ) : null}
+
                             {result.real_age_years ? (
                                 <div className={styles.metricCard}>
                                     <span>整体发育状态</span>
