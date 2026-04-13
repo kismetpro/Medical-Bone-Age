@@ -10,6 +10,7 @@ import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { detectJoints, predictBoneAgeByFormula } from '../../../lib/api';
+import type { PatientUser } from '../../DoctorDashboard/types';
 
 interface JointBox {
     id: string;
@@ -26,6 +27,10 @@ interface JointBox {
 interface FormulaMethodTabProps {
     result: PredictionResult | null;
     setResult?: (result: PredictionResult | null) => void;
+    patientUsers?: PatientUser[];
+    patientsLoading?: boolean;
+    targetUserId?: string;
+    setTargetUserId?: (id: string) => void;
 }
 
 // RUS-CHN 小关节定义（13个关键关节，匹配后端命名）
@@ -64,7 +69,11 @@ const getRUSCHNFormula = (gender: 'male' | 'female') => {
     }
 };
 
-const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
+const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ 
+    setResult,
+    patientUsers = [], patientsLoading = false,
+    targetUserId = '', setTargetUserId
+}) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
@@ -403,6 +412,25 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                         </div>
                     )}
                 </div>
+
+                {patientUsers.length > 0 && (
+                    <div className={styles.formGroup} style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
+                        <label style={{ marginBottom: '0.5rem', display: 'block' }}>选择患者</label>
+                        <select 
+                            className={styles.formInput}
+                            value={targetUserId}
+                            onChange={(e) => setTargetUserId?.(e.target.value)}
+                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}
+                        >
+                            <option value="">{patientsLoading ? '加载中...' : '请选择患者'}</option>
+                            {patientUsers.map((patient) => (
+                                <option key={patient.id} value={patient.id}>
+                                    {patient.username} (UID: {patient.id})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 <div
                     className={`${styles.uploadArea} ${!file && !preview ? styles.empty : ''}`}

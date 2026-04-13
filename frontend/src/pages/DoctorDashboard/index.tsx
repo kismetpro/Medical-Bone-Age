@@ -46,6 +46,7 @@ export default function DoctorDashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('records');
   const [predictResult, setPredictResult] = useState<PredictionResult | null>(null);
   const [jointResult, setJointResult] = useState<PredictionResult | null>(null);
+  const [jointTargetUserId, setJointTargetUserId] = useState<string>('');
   const [predictFile, setPredictFile] = useState<File | null>(null);
   const [predictPreview, setPredictPreview] = useState<string | null>(null);
   const [predictGender, setPredictGender] = useState<string>('male');
@@ -640,6 +641,10 @@ const viewDetails = async (id: string) => {
           <JointGradeTab 
             result={jointResult}
             setResult={setJointResult}
+            patientUsers={patientUsers}
+            patientsLoading={patientsLoading}
+            targetUserId={jointTargetUserId}
+            setTargetUserId={setJointTargetUserId}
           />
         )}
 
@@ -647,6 +652,10 @@ const viewDetails = async (id: string) => {
           <FormulaMethodTab 
             result={jointResult}
             setResult={setJointResult}
+            patientUsers={patientUsers}
+            patientsLoading={patientsLoading}
+            targetUserId={jointTargetUserId}
+            setTargetUserId={setJointTargetUserId}
           />
         )}
 
