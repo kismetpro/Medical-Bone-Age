@@ -318,7 +318,8 @@ class JointGrader:
         self,
         image_bytes: bytes,
         detected_joints: Dict[str, Dict],
-        img_size: int,
+        crop_canvas_size: int,
+        patch_size: int,
         mean: np.ndarray,
         std: np.ndarray,
     ):
@@ -329,7 +330,9 @@ class JointGrader:
         img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img_bgr_orig is None:
             raise ValueError("Could not decode image for detected-joint grading")
-        img_bgr_resized = cv2.resize(img_bgr_orig, (img_size, img_size))
+        img_bgr_resized = cv2.resize(
+            img_bgr_orig, (crop_canvas_size, crop_canvas_size)
+        )
 
         out: Dict[str, Dict] = {}
         for joint_name, det in detected_joints.items():
@@ -364,7 +367,9 @@ class JointGrader:
                 }
                 continue
 
-            x = self.preprocess_patch(patch, img_size, mean, std)
+            # The joint classifier was trained on 224x224 crops. Keep the
+            # detection canvas size separate from the classifier input size.
+            x = self.preprocess_patch(patch, patch_size, mean, std)
             logits, _, _ = self.models[model_joint]["model"](x, lambda_grl=0.0)
             probs = torch.softmax(logits, dim=1)
             pred_idx = int(torch.argmax(probs, dim=1).item())
@@ -1099,7 +1104,8 @@ DEFAULT_AGE_MIN = 1.0
 DEFAULT_AGE_MAX = 228.0
 
 IMG_SIZE = 256
-JOINT_IMG_SIZE = 1024
+JOINT_MODEL_INPUT_SIZE = 224
+JOINT_DETECTION_CANVAS_SIZE = 1024
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -2114,7 +2120,8 @@ def run_joint_assessment_pipeline(
             joint_grades = joint_grader.predict_detected_joints(
                 image_bytes,
                 recognized_joints_13.get("joints", {}),
-                JOINT_IMG_SIZE,
+                JOINT_DETECTION_CANVAS_SIZE,
+                JOINT_MODEL_INPUT_SIZE,
                 IMAGENET_MEAN,
                 IMAGENET_STD,
             )
@@ -3818,7 +3825,8 @@ async def joint_dpv3_detect(
             joint_grades = joint_grader.predict_detected_joints(
                 processed_content,
                 detected_joints,
-                JOINT_IMG_SIZE,
+                JOINT_DETECTION_CANVAS_SIZE,
+                JOINT_MODEL_INPUT_SIZE,
                 IMAGENET_MEAN,
                 IMAGENET_STD,
             )
@@ -3938,7 +3946,8 @@ async def formula_calculation(
             joint_grades = joint_grader.predict_detected_joints(
                 content,
                 detected_joints,
-                JOINT_IMG_SIZE,
+                JOINT_DETECTION_CANVAS_SIZE,
+                JOINT_MODEL_INPUT_SIZE,
                 IMAGENET_MEAN,
                 IMAGENET_STD,
             )
