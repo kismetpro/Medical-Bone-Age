@@ -52,7 +52,7 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                 >
                     <HistoryIcon size={18} /> 预测记录
                 </button>
-                <button 
+                {/* <button 
                     className={`${styles.navItem} ${isDashboard && activeTab === 'joint-grade' ? styles.active : ''}`} 
                     onClick={() => {
                         if (isDashboard && setActiveTab) setActiveTab('joint-grade');
@@ -60,7 +60,7 @@ const UserSidebar: React.FC<UserSidebarProps> = ({ activeTab, setActiveTab, user
                     }}
                 >
                     <Hand size={18} /> 小关节分级
-                </button>
+                </button> */}
                 <button 
                     className={`${styles.navItem} ${isDashboard && activeTab === 'bone-age-development' ? styles.active : ''}`} 
                     onClick={() => {

@@ -9,10 +9,15 @@ import styles from '../UserDashboard.module.css';
 import type { PredictionResult, ImageSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { API_BASE } from '../../../config';
+import type { PatientUser } from '../../DoctorDashboard/types';
 
 interface JointGradeTabProps {
     result: PredictionResult | null;
     setResult?: (result: PredictionResult | null) => void;
+    patientUsers?: PatientUser[];
+    patientsLoading?: boolean;
+    targetUserId?: string;
+    setTargetUserId?: (id: string) => void;
 }
 
 const RUS_13_ORDER = [
@@ -52,7 +57,11 @@ const isPendingJoint = (joint: { grade_raw?: number; status?: string } | undefin
     return joint.grade_raw === undefined || joint.grade_raw === null;
 };
 
-const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
+const JointGradeTab: React.FC<JointGradeTabProps> = ({ 
+    result, setResult, 
+    patientUsers = [], patientsLoading = false,
+    targetUserId = '', setTargetUserId
+}) => {
     // --- 1. 核心状态管理 ---
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -203,6 +212,25 @@ const JointGradeTab: React.FC<JointGradeTabProps> = ({ result, setResult }) => {
                     </div>
                 )}
             </div>
+
+            {patientUsers.length > 0 && (
+                <div className={styles.formGroup} style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
+                    <label style={{ marginBottom: '0.5rem', display: 'block' }}>选择患者</label>
+                    <select 
+                        className={styles.formInput}
+                        value={targetUserId}
+                        onChange={(e) => setTargetUserId?.(e.target.value)}
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}
+                    >
+                        <option value="">{patientsLoading ? '加载中...' : '请选择患者'}</option>
+                        {patientUsers.map((patient) => (
+                            <option key={patient.id} value={patient.id}>
+                                {patient.username} (UID: {patient.id})
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
 
             <div
                 className={`${styles.uploadArea} ${!file && !preview ? styles.empty : ''}`}
