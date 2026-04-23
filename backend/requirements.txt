@@ -8,5 +8,6 @@ opencv-python-headless
 ultralytics
 matplotlib
 requests
+httpx
 python-dotenv
 onnxruntime

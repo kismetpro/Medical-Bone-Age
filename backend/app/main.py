@@ -3,8 +3,8 @@ import math
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
-import requests
 import secrets
 import sqlite3
 import re
@@ -13,9 +13,10 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from collections import deque
+from urllib.parse import urlsplit
 
 import cv2
+import httpx
 import numpy as np
 import onnxruntime
 import torch
@@ -1160,6 +1161,7 @@ AUTH_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("AUTH_RATE_LIMIT_MAX_ATTEMPTS", "10
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com").strip()
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
+DEEPSEEK_TIMEOUT_SECONDS = float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "60"))
 
 ROLE_USER = "user"
 ROLE_DOCTOR = "doctor"
@@ -1427,6 +1429,30 @@ def _create_sessions_table(conn: sqlite3.Connection, table_name: str = "sessions
     )
 
 
+def _create_auth_rate_limits_table(conn: sqlite3.Connection):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auth_rate_limits (
+            scope TEXT NOT NULL,
+            client_key TEXT NOT NULL,
+            attempted_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_lookup
+        ON auth_rate_limits(scope, client_key, attempted_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_attempted_at
+        ON auth_rate_limits(attempted_at)
+        """
+    )
+
+
 def _table_sql(conn: sqlite3.Connection, table_name: str) -> str:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
@@ -1522,8 +1548,12 @@ def _migrate_auth_role_schema(conn: sqlite3.Connection):
     )
 
 
-def _generate_bootstrap_super_admin_password() -> str:
-    return f"Aa1{secrets.token_urlsafe(12)}"
+def _require_super_admin_init_password() -> str:
+    if not _validate_password_strength(SUPER_ADMIN_INIT_PASSWORD):
+        raise RuntimeError(
+            "SUPER_ADMIN_INIT_PASSWORD must include upper/lower letters and digits, minimum 8 chars"
+        )
+    return SUPER_ADMIN_INIT_PASSWORD
 
 
 def _ensure_default_super_admin(conn: sqlite3.Connection):
@@ -1542,13 +1572,7 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
             print(f"Promoted '{DEFAULT_SUPER_ADMIN_USERNAME}' to super_admin")
         return
 
-    bootstrap_password = (
-        SUPER_ADMIN_INIT_PASSWORD or _generate_bootstrap_super_admin_password()
-    )
-    if not _validate_password_strength(bootstrap_password):
-        raise RuntimeError(
-            "SUPER_ADMIN_INIT_PASSWORD must include upper/lower letters and digits, minimum 8 chars"
-        )
+    bootstrap_password = _require_super_admin_init_password()
     salt_hex = secrets.token_hex(16)
     pw_hash = hash_password(bootstrap_password, salt_hex, PBKDF2_ITERATIONS)
     now_iso = _to_iso(_utc_now())
@@ -1566,60 +1590,12 @@ def _ensure_default_super_admin(conn: sqlite3.Connection):
             now_iso,
         ),
     )
-    if SUPER_ADMIN_INIT_PASSWORD:
-        print(
-            f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}' from SUPER_ADMIN_INIT_PASSWORD"
-        )
-    else:
-        print(
-            f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}'. "
-            f"Temporary password: {bootstrap_password}"
-        )
-
-
-def _ensure_builtin_accounts(conn: sqlite3.Connection):
-    """Ensure standard built-in accounts exist and have the correct passwords: admin, doctor, user."""
-    builtin = [
-        ("admin", "Admin123456", ROLE_SUPER_ADMIN),
-        ("doctor", "Doctor123456", ROLE_DOCTOR),
-        ("user", "User123456", ROLE_USER),
-    ]
-    now_iso = _to_iso(_utc_now())
-    for username, password, role in builtin:
-        salt_hex = secrets.token_hex(16)
-        pw_hash = hash_password(password, salt_hex, PBKDF2_ITERATIONS)
-
-        row = conn.execute(
-            "SELECT id FROM users WHERE username = ?", (username,)
-        ).fetchone()
-        if not row:
-            conn.execute(
-                """
-                INSERT INTO users (username, role, password_hash, password_salt, iterations, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (username, role, pw_hash, salt_hex, PBKDF2_ITERATIONS, now_iso),
-            )
-            print(f"Created built-in account '{username}' with role '{role}'")
-        else:
-            # Force update role and password to match requested built-in credentials
-            conn.execute(
-                """
-                UPDATE users 
-                SET role = ?, password_hash = ?, password_salt = ?, iterations = ?
-                WHERE username = ?
-                """,
-                (role, pw_hash, salt_hex, PBKDF2_ITERATIONS, username),
-            )
-            # Invalidate existing sessions for security
-            conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
-            print(f"Refreshed built-in account '{username}' (role '{role}')")
-
-
+    print(f"Created bootstrap super admin '{DEFAULT_SUPER_ADMIN_USERNAME}'")
 def init_auth_db():
     with get_auth_conn() as conn:
         _create_users_table(conn)
         _create_sessions_table(conn)
+        _create_auth_rate_limits_table(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS qa_questions (
@@ -1656,7 +1632,6 @@ def init_auth_db():
         )
         if _auth_role_migration_needed(conn):
             _migrate_auth_role_schema(conn)
-        _ensure_builtin_accounts(conn)
         _ensure_default_super_admin(conn)
         conn.commit()
 
@@ -1819,9 +1794,6 @@ def get_session(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
     return row
 
 
-_auth_rate_bucket: Dict[str, deque] = {}
-
-
 def _validate_username(username: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_.-]{3,64}", username))
 
@@ -1837,16 +1809,38 @@ def _validate_password_strength(password: str) -> bool:
 
 def _check_auth_rate_limit(request: Request, scope: str):
     host = request.client.host if request.client else "unknown"
-    key = f"{scope}:{host}"
-    now = _utc_now().timestamp()
-    bucket = _auth_rate_bucket.setdefault(key, deque())
-    while bucket and now - bucket[0] > AUTH_RATE_LIMIT_WINDOW_SECONDS:
-        bucket.popleft()
-    if len(bucket) >= AUTH_RATE_LIMIT_MAX_ATTEMPTS:
-        raise HTTPException(
-            status_code=429, detail="Too many requests, please retry later"
+    now = _utc_now()
+    now_iso = _to_iso(now)
+    cutoff_iso = _to_iso(now - timedelta(seconds=AUTH_RATE_LIMIT_WINDOW_SECONDS))
+
+    with get_auth_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "DELETE FROM auth_rate_limits WHERE attempted_at <= ?",
+            (cutoff_iso,),
         )
-    bucket.append(now)
+        row = conn.execute(
+            """
+            SELECT COUNT(1)
+            FROM auth_rate_limits
+            WHERE scope = ? AND client_key = ? AND attempted_at > ?
+            """,
+            (scope, host, cutoff_iso),
+        ).fetchone()
+        attempt_count = int(row[0]) if row else 0
+        if attempt_count >= AUTH_RATE_LIMIT_MAX_ATTEMPTS:
+            conn.commit()
+            raise HTTPException(
+                status_code=429, detail="Too many requests, please retry later"
+            )
+        conn.execute(
+            """
+            INSERT INTO auth_rate_limits (scope, client_key, attempted_at)
+            VALUES (?, ?, ?)
+            """,
+            (scope, host, now_iso),
+        )
+        conn.commit()
 
 
 def _set_auth_cookie(response: Response, token: str, expires_at_iso: str):
@@ -1885,6 +1879,121 @@ def _resolve_token(request: Request, payload_token: Optional[str]) -> Optional[s
             return None
         return token
     return None
+
+
+def _validate_email_recipient(recipient: str) -> str:
+    normalized = recipient.strip()
+    if not re.fullmatch(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}", normalized
+    ):
+        raise HTTPException(status_code=400, detail="Invalid email recipient")
+    domain = normalized.rsplit("@", 1)[-1].lower()
+    if domain.endswith(".internal") or domain.endswith(".local"):
+        raise HTTPException(
+            status_code=400, detail="Email recipient domain is not allowed"
+        )
+    return normalized
+
+
+def _validate_webhook_url(webhook_url: str) -> str:
+    normalized = webhook_url.strip()
+    parsed = urlsplit(normalized)
+    if parsed.scheme.lower() != "https":
+        raise HTTPException(status_code=400, detail="Webhook URL must use HTTPS")
+    if not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Webhook URL is invalid")
+
+    hostname = parsed.hostname.strip().lower()
+    if hostname in {"localhost"} or hostname.endswith(".local"):
+        raise HTTPException(status_code=400, detail="Webhook host is not allowed")
+
+    try:
+        ip_addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        return normalized
+
+    if (
+        ip_addr.is_private
+        or ip_addr.is_loopback
+        or ip_addr.is_link_local
+        or ip_addr.is_reserved
+        or ip_addr.is_multicast
+        or ip_addr.is_unspecified
+    ):
+        raise HTTPException(status_code=400, detail="Webhook host is not allowed")
+    return normalized
+
+
+def _validate_notification_recipient(method: str, recipient: str) -> str:
+    method_lower = method.lower()
+    if method_lower == "email":
+        return _validate_email_recipient(recipient)
+    if method_lower in {"wechat", "feishu"}:
+        return _validate_webhook_url(recipient)
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unsupported method: {method}. Supported: email, wechat, feishu",
+    )
+
+
+def _sse_event(payload: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _stream_deepseek_chat(
+    messages: List[Dict[str, Any]],
+    temperature: float,
+    *,
+    timeout_seconds: float,
+    error_prefix: str,
+):
+    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": DEEPSEEK_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+    }
+
+    try:
+        timeout = httpx.Timeout(timeout_seconds)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                api_url,
+                headers=headers,
+                json=body,
+            ) as resp:
+                if resp.status_code >= 400:
+                    error_text = (await resp.aread()).decode("utf-8", "ignore")[:400]
+                    yield _sse_event({"error": f"{error_prefix}: {error_text}"})
+                    return
+
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        yield "data: [DONE]\n\n"
+                        return
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    choices = data.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield _sse_event({"content": content})
+    except Exception as exc:
+        yield _sse_event({"error": f"{error_prefix}: {exc}"})
 
 
 # ----------------------------
@@ -2897,37 +3006,35 @@ def qa_clear_questions(request: Request):
 
 
 @app.post("/send_notification")
-async def send_notification(request: NotificationRequest):
-    method = request.method.lower()
+async def send_notification(payload: NotificationRequest, request: Request):
+    _require_doctor(request)
+    method = payload.method.lower()
+    recipient = _validate_notification_recipient(method, payload.recipient)
     try:
         if method == "email":
             return await NotificationService.send_email(
-                recipient=request.recipient,
-                report_data=request.report_data,
-                remarks=request.remarks,
-                custom_template=request.custom_template,
-                report_id=request.report_id,
+                recipient=recipient,
+                report_data=payload.report_data,
+                remarks=payload.remarks,
+                custom_template=payload.custom_template,
+                report_id=payload.report_id,
             )
         if method == "wechat":
             return await NotificationService.send_wechat_webhook(
-                webhook_url=request.recipient,
-                report_data=request.report_data,
-                remarks=request.remarks,
-                custom_template=request.custom_template,
-                report_id=request.report_id,
+                webhook_url=recipient,
+                report_data=payload.report_data,
+                remarks=payload.remarks,
+                custom_template=payload.custom_template,
+                report_id=payload.report_id,
             )
         if method == "feishu":
             return await NotificationService.send_feishu_webhook(
-                webhook_url=request.recipient,
-                report_data=request.report_data,
-                remarks=request.remarks,
-                custom_template=request.custom_template,
-                report_id=request.report_id,
+                webhook_url=recipient,
+                report_data=payload.report_data,
+                remarks=payload.remarks,
+                custom_template=payload.custom_template,
+                report_id=payload.report_id,
             )
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported method: {request.method}. Supported: email, wechat, feishu",
-        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -3467,55 +3574,19 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
     if context_chunks:
         user_prompt = user_prompt + "\n\n" + "\n".join(context_chunks)
 
-    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-
-    async def generate_stream():
-        try:
-            resp = requests.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": DEEPSEEK_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0.2,
-                    "stream": True,
-                },
-                timeout=60,
-                stream=True,
-            )
-            if not resp.ok:
-                yield f"data: {json.dumps({'error': f'DeepSeek API error: {resp.text[:400]}'})}\n\n"
-                return
-
-            for line in resp.iter_lines():
-                if line:
-                    line_text = line.decode("utf-8")
-                    if line_text.startswith("data: "):
-                        data_str = line_text[6:]
-                        if data_str == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            choices = data.get("choices", [])
-                            if not choices:
-                                continue
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield f"data: {json.dumps({'content': content})}\n\n"
-                        except json.JSONDecodeError:
-                            continue
-        except Exception as exc:
-            yield f"data: {json.dumps({'error': f'AI assistant failed: {exc}'})}\n\n"
-
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    return StreamingResponse(
+        _stream_deepseek_chat(
+            messages,
+            0.2,
+            timeout_seconds=DEEPSEEK_TIMEOUT_SECONDS,
+            error_prefix="AI assistant failed",
+        ),
+        media_type="text/event-stream",
+    )
 
 
 class UserConsultRequest(BaseModel):
@@ -3539,55 +3610,19 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
         "回答时请结构清晰，必要时使用条目列表。"
     )
 
-    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-
-    async def generate_stream():
-        try:
-            resp = requests.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": DEEPSEEK_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": payload.message.strip()},
-                    ],
-                    "temperature": 0.4,
-                    "stream": True,
-                },
-                timeout=60,
-                stream=True,
-            )
-            if not resp.ok:
-                yield f"data: {json.dumps({'error': f'AI 服务调用失败: {resp.text[:400]}'})}\n\n"
-                return
-
-            for line in resp.iter_lines():
-                if line:
-                    line_text = line.decode("utf-8")
-                    if line_text.startswith("data: "):
-                        data_str = line_text[6:]
-                        if data_str == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            choices = data.get("choices", [])
-                            if not choices:
-                                continue
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield f"data: {json.dumps({'content': content})}\n\n"
-                        except json.JSONDecodeError:
-                            continue
-        except Exception as exc:
-            yield f"data: {json.dumps({'error': f'智能问诊失败: {exc}'})}\n\n"
-
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": payload.message.strip()},
+    ]
+    return StreamingResponse(
+        _stream_deepseek_chat(
+            messages,
+            0.4,
+            timeout_seconds=DEEPSEEK_TIMEOUT_SECONDS,
+            error_prefix="智能问诊失败",
+        ),
+        media_type="text/event-stream",
+    )
 
 
 class ImageConsultRequest(BaseModel):
@@ -3613,8 +3648,6 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
         "如果用户上传了X光片图片，请仔细观察并给出专业的解读建议。"
     )
 
-    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-
     user_content = []
     if payload.message.strip():
         user_content.append({"type": "text", "text": payload.message.strip()})
@@ -3627,53 +3660,19 @@ async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Requ
             image_data = f"data:image/jpeg;base64,{image_data}"
         user_content.append({"type": "image_url", "image_url": {"url": image_data}})
 
-    async def generate_stream():
-        try:
-            resp = requests.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": DEEPSEEK_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "temperature": 0.4,
-                    "stream": True,
-                },
-                timeout=120,
-                stream=True,
-            )
-            if not resp.ok:
-                yield f"data: {json.dumps({'error': f'AI 服务调用失败: {resp.text[:400]}'})}\n\n"
-                return
-
-            for line in resp.iter_lines():
-                if line:
-                    line_text = line.decode("utf-8")
-                    if line_text.startswith("data: "):
-                        data_str = line_text[6:]
-                        if data_str == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            choices = data.get("choices", [])
-                            if not choices:
-                                continue
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield f"data: {json.dumps({'content': content})}\n\n"
-                        except json.JSONDecodeError:
-                            continue
-        except Exception as exc:
-            yield f"data: {json.dumps({'error': f'智能问诊失败: {exc}'})}\n\n"
-
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+    return StreamingResponse(
+        _stream_deepseek_chat(
+            messages,
+            0.4,
+            timeout_seconds=max(DEEPSEEK_TIMEOUT_SECONDS, 120.0),
+            error_prefix="智能问诊失败",
+        ),
+        media_type="text/event-stream",
+    )
 
 
 # @app.post("/joint-grading")
