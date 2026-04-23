@@ -120,6 +120,7 @@ export const detectJoints = async (
                 id,
                 name: id,
                 bbox: joint.bbox_xyxy || joint.bbox,
+                bboxSpace: joint.bbox_space || 'original',
                 grade: semanticJoint?.grade_raw ?? gradedJoint?.grade_raw,
                 score: joint.score || 1.0,
                 status: resolvedStatus,

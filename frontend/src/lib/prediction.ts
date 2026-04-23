@@ -99,6 +99,7 @@ export async function submitPredictionRequest({
   contrast = 1,
   quickMode = false,
   minimalMode = false,
+  useDpv3 = true,
   headers = {},
 }: {
   file: File;
@@ -111,6 +112,7 @@ export async function submitPredictionRequest({
   contrast?: number;
   quickMode?: boolean;
   minimalMode?: boolean;
+  useDpv3?: boolean;
   headers?: Record<string, string>;
 }) {
   const formData = new FormData();
@@ -133,6 +135,7 @@ export async function submitPredictionRequest({
   formData.append('contrast', String(contrast));
   formData.append('quick_mode', String(quickMode));
   formData.append('minimal_mode', String(minimalMode));
+  formData.append('use_dpv3', String(useDpv3));
 
   const response = await fetch(`${API_BASE}/predict`, {
     method: 'POST',

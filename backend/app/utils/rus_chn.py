@@ -50,6 +50,73 @@ BONE_NAMES_CN = {
     'DIPFifth': '第五远节 (DIP5)'
 }
 
+RUS_13 = [
+    'Radius',
+    'Ulna',
+    'MCPFirst',
+    'MCPThird',
+    'MCPFifth',
+    'PIPFirst',
+    'PIPThird',
+    'PIPFifth',
+    'MIPThird',
+    'MIPFifth',
+    'DIPFirst',
+    'DIPThird',
+    'DIPFifth',
+]
+
+
+def _coerce_grade_raw(grade_raw):
+    if grade_raw is None:
+        return 0
+
+    try:
+        return int(round(float(grade_raw)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def normalize_rus_stage(grade_raw, joint_name, gender):
+    """
+    Normalize a predicted raw grade to a valid RUS stage for the given joint.
+
+    The joint classifiers are trained with joint-specific numeric folders
+    (for example DIP uses 1-11, Radius uses 1-14), so `grade_raw` already
+    represents the medical stage scale for that joint. We therefore clamp
+    directly to the score-table range instead of linearly remapping all
+    joints through a shared 13-stage scale.
+    """
+    gender_key = 'male' if gender == 'male' else 'female'
+    score_list = SCORE_TABLE[gender_key][joint_name]
+    max_stage = len(score_list) - 1
+    grade = _coerce_grade_raw(grade_raw)
+    return max(0, min(grade, max_stage))
+
+
+def calc_rus_score(aligned_13, gender):
+    gender_key = 'male' if gender == 'male' else 'female'
+    details = []
+    total_score = 0
+
+    for joint in RUS_13:
+        payload = aligned_13.get(joint, {}) or {}
+        grade_raw = _coerce_grade_raw(payload.get('grade_raw'))
+        stage = normalize_rus_stage(grade_raw, joint, gender_key)
+        score = int(SCORE_TABLE[gender_key][joint][stage])
+        total_score += score
+
+        details.append({
+            'joint': joint,
+            'grade_raw': grade_raw,
+            'stage': stage,
+            'score': score,
+            'imputed': bool(payload.get('imputed', False)),
+            'source_joint': payload.get('source_joint', joint if grade_raw else 'none'),
+        })
+
+    return total_score, details
+
 def calc_bone_age_from_score(score, gender):
     """
     Calculate bone age (years) from total RUS-CHN score.

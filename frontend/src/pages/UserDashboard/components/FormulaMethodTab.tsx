@@ -18,6 +18,7 @@ interface JointBox {
     y: number;
     width: number;
     height: number;
+    bboxSpace?: 'original' | 'resized';
     grade?: number;
     score?: number;
     status?: 'ok' | 'pending' | 'error';
@@ -64,6 +65,8 @@ const getRUSCHNFormula = (gender: 'male' | 'female') => {
     }
 };
 
+const roundCoord = (value: number) => Math.round(value * 100) / 100;
+
 const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -83,29 +86,102 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     const [drawingStart, setDrawingStart] = useState<{ x: number; y: number } | null>(null);
     const [drawingEnd, setDrawingEnd] = useState<{ x: number; y: number } | null>(null);
     const [autoPlotImage, setAutoPlotImage] = useState<string | null>(null);
+    const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const previewRef = useRef<HTMLDivElement>(null);
+    const imageFrameRef = useRef<HTMLDivElement>(null);
+    const previewImageRef = useRef<HTMLImageElement>(null);
 
     const imageStyle = useMemo(() => ({
         filter: `brightness(${imgSettings.brightness}%) contrast(${imgSettings.contrast}) ${imgSettings.invert ? 'invert(1)' : ''}`,
-        transform: `scale(${imgSettings.scale / 100})`,
+        display: 'block',
         maxWidth: '100%',
         borderRadius: '8px',
-        transition: 'filter 0.2s ease, transform 0.2s ease'
+        transition: 'filter 0.2s ease'
     }), [imgSettings]);
+
+    const imageFrameStyle = useMemo<React.CSSProperties>(() => ({
+        position: 'relative',
+        display: 'inline-block',
+        lineHeight: 0,
+        transform: `scale(${imgSettings.scale / 100})`,
+        transformOrigin: 'center center',
+        transition: 'transform 0.2s ease',
+    }), [imgSettings.scale]);
+
+    const resetDetectionState = useCallback(() => {
+        setJointBoxes([]);
+        setSelectedJoint(null);
+        setAutoPlotImage(null);
+        setFormulaResult(RUS_CHN_FORMULA);
+        setCurrentJointIndex(0);
+        setDrawingStart(null);
+        setDrawingEnd(null);
+        setIsDrawing(false);
+        setImageNaturalSize(null);
+    }, []);
+
+    const handlePreviewImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+        const image = event.currentTarget;
+        if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+            setImageNaturalSize({
+                width: image.naturalWidth,
+                height: image.naturalHeight,
+            });
+        }
+    }, []);
+
+    const getImageFrameMetrics = useCallback(() => {
+        const imageFrame = imageFrameRef.current;
+        const image = previewImageRef.current;
+        if (!imageFrame || !image) return null;
+
+        const rect = imageFrame.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return null;
+
+        return {
+            rect,
+            naturalWidth: image.naturalWidth || rect.width,
+            naturalHeight: image.naturalHeight || rect.height,
+        };
+    }, []);
+
+    const getRelativePoint = useCallback((
+        clientX: number,
+        clientY: number,
+        clampToImage = false,
+    ) => {
+        const metrics = getImageFrameMetrics();
+        if (!metrics) return null;
+
+        let x = clientX - metrics.rect.left;
+        let y = clientY - metrics.rect.top;
+
+        if (clampToImage) {
+            x = Math.max(0, Math.min(metrics.rect.width, x));
+            y = Math.max(0, Math.min(metrics.rect.height, y));
+        } else if (x < 0 || y < 0 || x > metrics.rect.width || y > metrics.rect.height) {
+            return null;
+        }
+
+        return {
+            x,
+            y,
+            displayWidth: metrics.rect.width,
+            displayHeight: metrics.rect.height,
+            naturalWidth: metrics.naturalWidth,
+            naturalHeight: metrics.naturalHeight,
+        };
+    }, [getImageFrameMetrics]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
         if (selectedFile) {
             setFile(selectedFile);
+            resetDetectionState();
             const reader = new FileReader();
             reader.onload = (ev) => {
                 setPreview(ev.target?.result as string);
-                // 重置关节框
-                setJointBoxes([]);
-                setAutoPlotImage(null);
-                setFormulaResult(RUS_CHN_FORMULA);
             };
             reader.readAsDataURL(selectedFile);
         }
@@ -117,13 +193,10 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
         const droppedFile = e.dataTransfer.files?.[0];
         if (droppedFile) {
             setFile(droppedFile);
+            resetDetectionState();
             const reader = new FileReader();
             reader.onload = (ev) => {
                 setPreview(ev.target?.result as string);
-                setJointBoxes([]);
-                setAutoPlotImage(null);
-                setFormulaResult(RUS_CHN_FORMULA);
-                setCurrentJointIndex(0);
             };
             reader.readAsDataURL(droppedFile);
         }
@@ -131,49 +204,51 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
 
     // 手动绘制关节框
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (detectionMode !== 'manual' || !previewRef.current) return;
+        if (detectionMode !== 'manual') return;
         
         // 阻止事件冒泡，避免触发其他点击事件
         e.preventDefault();
         e.stopPropagation();
-        
-        const rect = previewRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+
+        const point = getRelativePoint(e.clientX, e.clientY);
+        if (!point) return;
         
         setIsDrawing(true);
-        setDrawingStart({ x, y });
-        setDrawingEnd({ x, y });
-    }, [detectionMode]);
+        setDrawingStart({ x: point.x, y: point.y });
+        setDrawingEnd({ x: point.x, y: point.y });
+    }, [detectionMode, getRelativePoint]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (!isDrawing || !drawingStart || !previewRef.current) return;
+        if (!isDrawing || !drawingStart) return;
         
         e.preventDefault();
-        
-        const rect = previewRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+
+        const point = getRelativePoint(e.clientX, e.clientY, true);
+        if (!point) return;
         
         // 更新绘制终点，用于显示临时框
-        setDrawingEnd({ x, y });
-    }, [isDrawing, drawingStart]);
+        setDrawingEnd({ x: point.x, y: point.y });
+    }, [drawingStart, getRelativePoint, isDrawing]);
 
     const handleMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (!isDrawing || !drawingStart || !previewRef.current) return;
+        if (!isDrawing || !drawingStart) return;
         
         e.preventDefault();
         e.stopPropagation();
-        
-        const rect = previewRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+
+        const point = getRelativePoint(e.clientX, e.clientY, true);
+        if (!point) {
+            setIsDrawing(false);
+            setDrawingStart(null);
+            setDrawingEnd(null);
+            return;
+        }
         
         // 计算框的坐标和尺寸
-        const boxX = Math.min(drawingStart.x, x);
-        const boxY = Math.min(drawingStart.y, y);
-        const boxWidth = Math.abs(x - drawingStart.x);
-        const boxHeight = Math.abs(y - drawingStart.y);
+        const boxX = Math.min(drawingStart.x, point.x);
+        const boxY = Math.min(drawingStart.y, point.y);
+        const boxWidth = Math.abs(point.x - drawingStart.x);
+        const boxHeight = Math.abs(point.y - drawingStart.y);
         
         // 只有当框足够大时才添加
         if (boxWidth > 10 && boxHeight > 10 && currentJointIndex < RUS_JOINTS.length) {
@@ -181,10 +256,11 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
             const newJoint: JointBox = {
                 id: jointInfo.id,
                 name: jointInfo.name,
-                x: boxX,
-                y: boxY,
-                width: boxWidth,
-                height: boxHeight,
+                x: roundCoord((boxX / point.displayWidth) * point.naturalWidth),
+                y: roundCoord((boxY / point.displayHeight) * point.naturalHeight),
+                width: roundCoord((boxWidth / point.displayWidth) * point.naturalWidth),
+                height: roundCoord((boxHeight / point.displayHeight) * point.naturalHeight),
+                bboxSpace: 'original',
                 status: 'pending'
             };
             
@@ -200,7 +276,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
         setIsDrawing(false);
         setDrawingStart(null);
         setDrawingEnd(null);
-    }, [isDrawing, drawingStart, currentJointIndex]);
+    }, [currentJointIndex, drawingStart, getRelativePoint, isDrawing]);
 
     // 删除指定的关节框
     const deleteJointBox = (jointId: string) => {
@@ -220,6 +296,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     const clearManualJoints = () => {
         setJointBoxes([]);
         setAutoPlotImage(null);
+        setSelectedJoint(null);
         setCurrentJointIndex(0);
         setFormulaResult(RUS_CHN_FORMULA);
     };
@@ -252,6 +329,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                     y: bbox[1] || 0,
                     width: (bbox[2] || 0) - (bbox[0] || 0),
                     height: (bbox[3] || 0) - (bbox[1] || 0),
+                    bboxSpace: joint.bboxSpace || 'original',
                     grade: joint.grade,
                     score: joint.score,
                     status: joint.status || 'ok'
@@ -369,15 +447,21 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
     }, [jointBoxes]);
 
     const getBoxStyle = (joint: JointBox): React.CSSProperties => {
+        if (!imageNaturalSize) {
+            return { display: 'none' };
+        }
+
         const jointInfo = RUS_JOINTS.find(rj => rj.id === joint.id);
         const isSelected = selectedJoint === joint.id;
+        const baseWidth = joint.bboxSpace === 'resized' ? 1024 : imageNaturalSize.width;
+        const baseHeight = joint.bboxSpace === 'resized' ? 1024 : imageNaturalSize.height;
         
         return {
             position: 'absolute',
-            left: `${joint.x}px`,
-            top: `${joint.y}px`,
-            width: `${joint.width}px`,
-            height: `${joint.height}px`,
+            left: `${(joint.x / baseWidth) * 100}%`,
+            top: `${(joint.y / baseHeight) * 100}%`,
+            width: `${(joint.width / baseWidth) * 100}%`,
+            height: `${(joint.height / baseHeight) * 100}%`,
             border: `3px solid ${jointInfo?.color || '#3b82f6'}`,
             backgroundColor: `${jointInfo?.color || '#3b82f6'}20`,
             borderRadius: '4px',
@@ -422,7 +506,7 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                     }}
                 >
                     {preview ? (
-                        <div className={styles.previewContainer} style={{ position: 'relative' }} ref={previewRef}>
+                        <div className={styles.previewContainer} style={{ position: 'relative' }}>
                             {/* 手动模式提示 */}
                             {detectionMode === 'manual' && (
                                 <div style={{
@@ -448,99 +532,105 @@ const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ setResult }) => {
                                 </div>
                             )}
 
-                            <img 
-                                src={(detectionMode === 'auto' && autoPlotImage) ? autoPlotImage : preview} 
-                                alt="X-Ray" 
-                                className={styles.previewImage} 
-                                style={(detectionMode === 'auto' && autoPlotImage) ? { maxWidth: '100%', borderRadius: '8px' } : imageStyle} 
-                            />
-                            
-                            {/* 临时绘制框 */}
-                            {isDrawing && drawingStart && drawingEnd && (
-                                <div style={{
-                                    position: 'absolute',
-                                    left: `${Math.min(drawingStart.x, drawingEnd.x)}px`,
-                                    top: `${Math.min(drawingStart.y, drawingEnd.y)}px`,
-                                    width: `${Math.abs(drawingEnd.x - drawingStart.x)}px`,
-                                    height: `${Math.abs(drawingEnd.y - drawingStart.y)}px`,
-                                    border: '2px dashed #3b82f6',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                    borderRadius: '4px',
-                                    pointerEvents: 'none',
-                                    zIndex: 50
-                                }} />
-                            )}
-                            
-                            {/* 显示关节框 (仅平衡手动模式) */}
-                            {(!autoPlotImage || detectionMode === 'manual') && jointBoxes.map(joint => (
-                                <div
-                                    key={joint.id}
-                                    style={getBoxStyle(joint)}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedJoint(joint.id === selectedJoint ? null : joint.id);
-                                    }}
-                                    title={`${joint.name} - 等级: ${joint.grade !== undefined && joint.grade !== null ? joint.grade : 'N/A'}`}
-                                >
-                                    <span style={{
+                            <div ref={imageFrameRef} style={imageFrameStyle}>
+                                <img 
+                                    ref={previewImageRef}
+                                    src={(detectionMode === 'auto' && autoPlotImage) ? autoPlotImage : preview} 
+                                    alt="X-Ray" 
+                                    className={styles.previewImage} 
+                                    style={(detectionMode === 'auto' && autoPlotImage)
+                                        ? { display: 'block', maxWidth: '100%', borderRadius: '8px' }
+                                        : imageStyle}
+                                    onLoad={handlePreviewImageLoad}
+                                />
+                                
+                                {/* 临时绘制框 */}
+                                {isDrawing && drawingStart && drawingEnd && (
+                                    <div style={{
                                         position: 'absolute',
-                                        top: '-24px',
-                                        left: '0',
-                                        background: joint.status === 'ok' ? '#22c55e' : joint.status === 'pending' ? '#f59e0b' : '#ef4444',
-                                        color: 'white',
-                                        padding: '2px 6px',
+                                        left: `${Math.min(drawingStart.x, drawingEnd.x)}px`,
+                                        top: `${Math.min(drawingStart.y, drawingEnd.y)}px`,
+                                        width: `${Math.abs(drawingEnd.x - drawingStart.x)}px`,
+                                        height: `${Math.abs(drawingEnd.y - drawingStart.y)}px`,
+                                        border: '2px dashed #3b82f6',
+                                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
                                         borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: 'bold',
-                                        whiteSpace: 'nowrap'
-                                    }}>
-                                        {joint.name}
-                                    </span>
-                                    {(joint.grade !== undefined && joint.grade !== null) && (
+                                        pointerEvents: 'none',
+                                        zIndex: 50
+                                    }} />
+                                )}
+                                
+                                {/* 显示关节框 */}
+                                {(!autoPlotImage || detectionMode === 'manual') && jointBoxes.map(joint => (
+                                    <div
+                                        key={joint.id}
+                                        style={getBoxStyle(joint)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedJoint(joint.id === selectedJoint ? null : joint.id);
+                                        }}
+                                        title={`${joint.name} - 等级: ${joint.grade !== undefined && joint.grade !== null ? joint.grade : 'N/A'}`}
+                                    >
                                         <span style={{
                                             position: 'absolute',
-                                            bottom: '-24px',
-                                            right: '0',
-                                            background: '#3b82f6',
+                                            top: '-24px',
+                                            left: '0',
+                                            background: joint.status === 'ok' ? '#22c55e' : joint.status === 'pending' ? '#f59e0b' : '#ef4444',
                                             color: 'white',
                                             padding: '2px 6px',
                                             borderRadius: '4px',
                                             fontSize: '12px',
-                                            fontWeight: 'bold'
+                                            fontWeight: 'bold',
+                                            whiteSpace: 'nowrap'
                                         }}>
-                                            等级: {joint.grade}
+                                            {joint.name}
                                         </span>
-                                    )}
-                                    {/* 删除按钮 */}
-                                    {detectionMode === 'manual' && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                deleteJointBox(joint.id);
-                                            }}
-                                            style={{
+                                        {(joint.grade !== undefined && joint.grade !== null) && (
+                                            <span style={{
                                                 position: 'absolute',
-                                                top: '-10px',
-                                                right: '-10px',
-                                                background: '#ef4444',
+                                                bottom: '-24px',
+                                                right: '0',
+                                                background: '#3b82f6',
                                                 color: 'white',
-                                                border: 'none',
-                                                borderRadius: '50%',
-                                                width: '20px',
-                                                height: '20px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px',
                                                 fontSize: '12px',
                                                 fontWeight: 'bold'
-                                            }}
-                                        >
-                                            ×
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                                            }}>
+                                                等级: {joint.grade}
+                                            </span>
+                                        )}
+                                        {/* 删除按钮 */}
+                                        {detectionMode === 'manual' && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteJointBox(joint.id);
+                                                }}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: '-10px',
+                                                    right: '-10px',
+                                                    background: '#ef4444',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '50%',
+                                                    width: '20px',
+                                                    height: '20px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '12px',
+                                                    fontWeight: 'bold'
+                                                }}
+                                            >
+                                                ×
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                             
                             <button className={styles.reuploadBtn} onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
                                 <Upload size={14} /> 更换影像
