@@ -3,16 +3,43 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+
 class GradCAM:
     def __init__(self, model, target_layer):
         self.model = model
         self.target_layer = target_layer
         self.gradients = None
         self.activations = None
-        
-        # Hooks
-        self.target_layer.register_forward_hook(self.save_activation)
-        self.target_layer.register_full_backward_hook(self.save_gradient)
+        self._forward_handle = None
+        self._backward_handle = None
+
+    def __enter__(self):
+        self._ensure_hooks()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+    def __del__(self):
+        self.close()
+
+    def _ensure_hooks(self):
+        if self._forward_handle is None:
+            self._forward_handle = self.target_layer.register_forward_hook(
+                self.save_activation
+            )
+        if self._backward_handle is None:
+            self._backward_handle = self.target_layer.register_full_backward_hook(
+                self.save_gradient
+            )
+
+    def close(self):
+        if self._forward_handle is not None:
+            self._forward_handle.remove()
+            self._forward_handle = None
+        if self._backward_handle is not None:
+            self._backward_handle.remove()
+            self._backward_handle = None
 
     def save_activation(self, module, input, output):
         self.activations = output
@@ -22,6 +49,7 @@ class GradCAM:
         self.gradients = grad_output[0]
 
     def __call__(self, x, gender_input=None):
+        self._ensure_hooks()
         # 1. Forward pass
         # Note: We need gradients here, so model must not be in no_grad (partially)
         # But we can assume inputs require_grad=True? No, usually model parameters.
@@ -55,9 +83,12 @@ class GradCAM:
         # ReLU
         cam = F.relu(cam)
         
-        # Resize to input image size (500x500)
-        # Assuming x is (1, 1, 500, 500)
-        cam = F.interpolate(cam, size=(500, 500), mode='bilinear', align_corners=False)
+        cam = F.interpolate(
+            cam,
+            size=tuple(x.shape[-2:]),
+            mode="bilinear",
+            align_corners=False,
+        )
         
         # Normalize to 0-1
         cam = cam - cam.min()
