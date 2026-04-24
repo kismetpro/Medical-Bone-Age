@@ -1,3 +1,4 @@
+import asyncio
 import os
 import math
 import base64
@@ -10,8 +11,9 @@ import sqlite3
 import re
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
@@ -26,7 +28,9 @@ import torchvision.transforms.functional as TF
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 from fastapi import (
     FastAPI,
     File,
@@ -295,8 +299,6 @@ class JointGrader:
             return {}
 
         x = self.preprocess(image_bytes, img_size, mean, std)
-        # x =  image_bytes
-        x = cv2.resize(x, (1024, 1024))
         out = {}
 
         for joint, item in self.models.items():
@@ -459,6 +461,14 @@ class FractureDetector:
         return anomalies, detection_image_base64
 
 
+def _resolve_hand_side(
+    radius_x: Optional[float], ulna_x: Optional[float], fallback: str = "unknown"
+) -> str:
+    if radius_x is None or ulna_x is None:
+        return fallback if fallback in {"left", "right"} else "unknown"
+    return "left" if float(radius_x) > float(ulna_x) else "right"
+
+
 class SmallJointRecognizer:
     def __init__(self, model_path: str, imgsz: int = 1024, conf: float = 0.2):
         self.model = YOLO(model_path)
@@ -473,12 +483,14 @@ class SmallJointRecognizer:
         grades: Dict[str, Dict] = None,
     ) -> Optional[str]:
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        fig, ax = plt.subplots(figsize=(8, 10), dpi=120)
+        fig = Figure(figsize=(8, 10), dpi=120)
+        canvas = FigureCanvasAgg(fig)
+        ax = fig.add_subplot(111)
         ax.imshow(img_rgb)
 
         for name, payload in joints.items():
             x1, y1, x2, y2 = payload["bbox_xyxy"]
-            rect = plt.Rectangle(
+            rect = Rectangle(
                 (x1, y1),
                 x2 - x1,
                 y2 - y1,
@@ -509,11 +521,10 @@ class SmallJointRecognizer:
         ax.set_title(f"Small Joint Detect | Hand: {hand_side} | Found: {len(joints)}")
         ax.axis("off")
         fig.tight_layout()
-        fig.canvas.draw()
+        canvas.draw()
 
-        rgba = np.asarray(fig.canvas.buffer_rgba())
+        rgba = np.asarray(canvas.buffer_rgba())
         rgb = rgba[:, :, :3].copy()
-        plt.close(fig)
 
         plot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         ok, buf = cv2.imencode(".jpg", plot_bgr)
@@ -557,9 +568,7 @@ class SmallJointRecognizer:
             elif lbl == "Ulna":
                 ulna_x = cx
 
-        is_left = None
-        if ulna_x is not None and radius_x is not None:
-            is_left = ulna_x < radius_x
+        hand_side = _resolve_hand_side(radius_x, ulna_x)
 
         final_13: Dict[str, Dict] = {}
 
@@ -570,10 +579,14 @@ class SmallJointRecognizer:
             target_suffixes: List[str],
         ):
             subset = [d for d in all_d if d["lbl"] == yolo_lbl]
-            if is_left is None:
+            if hand_side == "unknown":
                 subset = sorted(subset, key=lambda x: x["cx"])
             else:
-                subset = sorted(subset, key=lambda x: x["cx"], reverse=not is_left)
+                subset = sorted(
+                    subset,
+                    key=lambda x: x["cx"],
+                    reverse=(hand_side == "right"),
+                )
 
             for idx, suffix in zip(finger_indices, target_suffixes):
                 if len(subset) > idx:
@@ -619,10 +632,6 @@ class SmallJointRecognizer:
                     round((y2_orig - y1_orig) / h, 4),
                 ],
             }
-
-        hand_side = "unknown"
-        if is_left is not None:
-            hand_side = "left" if is_left else "right"
 
         plot_image_base64 = self._render_with_plt(img_bgr_orig, joints, hand_side)
         return {
@@ -861,10 +870,10 @@ def _resolve_hand_side_from_regions(
     if radius_regions and ulna_regions:
         radius_region = max(radius_regions, key=_region_confidence)
         ulna_region = max(ulna_regions, key=_region_confidence)
-        return (
-            "left"
-            if _region_center_x(radius_region) > _region_center_x(ulna_region)
-            else "right"
+        return _resolve_hand_side(
+            _region_center_x(radius_region),
+            _region_center_x(ulna_region),
+            fallback=fallback,
         )
     return fallback if fallback in {"left", "right"} else "unknown"
 
@@ -1162,6 +1171,9 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com").strip()
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
 DEEPSEEK_TIMEOUT_SECONDS = float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "60"))
+SESSION_CLEANUP_INTERVAL_SECONDS = int(
+    os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600")
+)
 
 ROLE_USER = "user"
 ROLE_DOCTOR = "doctor"
@@ -1185,6 +1197,7 @@ fracture_detector: Optional[FractureDetector] = None
 joint_grader: Optional[JointGrader] = None
 joint_recognizer: Optional[SmallJointRecognizer] = None
 dpv3_detector: Optional[DPV3BoneDetector] = None
+_gradcam_lock = Lock()
 
 
 # ----------------------------
@@ -1245,6 +1258,7 @@ async def lifespan(app: FastAPI):
 
     init_auth_db()
     init_prediction_db()
+    session_cleanup_task = asyncio.create_task(_cleanup_expired_sessions_loop())
 
     print(f"Loading models on {device}...")
 
@@ -1300,13 +1314,18 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"Failed to load DP V3 detector: {exc}")
 
-    yield
+    try:
+        yield
+    finally:
+        session_cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await session_cleanup_task
 
-    models_ensemble = []
-    fracture_detector = None
-    joint_grader = None
-    joint_recognizer = None
-    dpv3_detector = None
+        models_ensemble = []
+        fracture_detector = None
+        joint_grader = None
+        joint_recognizer = None
+        dpv3_detector = None
 
 
 app = FastAPI(title="Bone Age Assessment API", lifespan=lifespan)
@@ -1633,6 +1652,7 @@ def init_auth_db():
         if _auth_role_migration_needed(conn):
             _migrate_auth_role_schema(conn)
         _ensure_default_super_admin(conn)
+        cleanup_expired_sessions(conn)
         conn.commit()
 
 
@@ -1757,6 +1777,17 @@ def cleanup_expired_sessions(conn: sqlite3.Connection):
     conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso,))
 
 
+async def _cleanup_expired_sessions_loop():
+    try:
+        while True:
+            await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
+            with get_auth_conn() as conn:
+                cleanup_expired_sessions(conn)
+                conn.commit()
+    except asyncio.CancelledError:
+        return
+
+
 def create_session(conn: sqlite3.Connection, user_id: int, role: str) -> Dict[str, Any]:
     token = secrets.token_urlsafe(32)
     now = _utc_now()
@@ -1774,7 +1805,6 @@ def create_session(conn: sqlite3.Connection, user_id: int, role: str) -> Dict[st
 
 
 def get_session(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
-    cleanup_expired_sessions(conn)
     row = conn.execute(
         """
         SELECT s.token, s.user_id, s.role, s.expires_at, u.username
@@ -1788,8 +1818,6 @@ def get_session(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
         return None
 
     if _from_iso(row["expires_at"]) <= _utc_now():
-        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-        conn.commit()
         return None
     return row
 
@@ -2089,17 +2117,15 @@ def build_gradcam_heatmap(img_tensor: torch.Tensor, gender_tensor: torch.Tensor)
         return None
 
     try:
-        cam_model = models_ensemble[0]["model"]
-        target = cam_model.backbone.layer4[-1]
+        with _gradcam_lock:
+            cam_model = models_ensemble[0]["model"]
+            target = cam_model.backbone.layer4[-1]
 
-        img_cam = img_tensor.clone().detach()
-        img_cam.requires_grad = True
+            img_cam = img_tensor.clone().detach()
+            img_cam.requires_grad = True
 
-        grad_cam = GradCAM(cam_model, target)
-        _, cam_mask = grad_cam(img_cam, gender_tensor)
-
-        target._forward_hooks.clear()
-        target._backward_hooks.clear()
+            with GradCAM(cam_model, target) as grad_cam:
+                _, cam_mask = grad_cam(img_cam, gender_tensor)
 
         heatmap_img = overlay_heatmap(img_cam.detach().cpu(), cam_mask)
         ok, buffer = cv2.imencode(".jpg", heatmap_img)
@@ -2168,7 +2194,11 @@ def run_joint_assessment_pipeline(
                     if radius_region and ulna_region:
                         radius_x = radius_region.get("centroid", (0, 0))[0]
                         ulna_x = ulna_region.get("centroid", (0, 0))[0]
-                        hand_side = "left" if radius_x > ulna_x else "right"
+                        hand_side = _resolve_hand_side(
+                            radius_x,
+                            ulna_x,
+                            fallback=dpv3_results.get("hand_side", "unknown"),
+                        )
                     else:
                         hand_side = dpv3_results.get("hand_side", "unknown")
 
