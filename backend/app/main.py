@@ -1,5 +1,6 @@
 import asyncio
 import os
+import glob
 import math
 import base64
 import hashlib
@@ -18,19 +19,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 import cv2
-import httpx
 import numpy as np
-import onnxruntime
 import torch
 import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms.functional as TF
-import matplotlib
-
-matplotlib.use("Agg")
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
 from fastapi import (
     FastAPI,
     File,
@@ -45,8 +38,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from ultralytics import YOLO
 
+from app import ai_consult
+from app.detector_of_bone.main import FractureDetector
+from app.joint_assessment import (
+    FINGER_LABELS_EN,
+    RUS_13,
+    SmallJointRecognizer,
+    _resolve_hand_side,
+    _resolve_hand_side_from_regions,
+    align_joint_semantics,
+    rename_dpv3_regions_to_named_joints,
+    run_joint_assessment_pipeline,
+    semantic_align_missing_joint_grades,
+    standardize_detected_joints_to_rus,
+)
 from app.utils.gradcam import GradCAM, overlay_heatmap
 from app.utils.foreign_object_detection import (
     ANOMALY_SCORE_THRESHOLD,
@@ -171,6 +177,30 @@ class DANNHyperModel(nn.Module):
         return cls, dom, h
 
 
+class Stage1JointModel(nn.Module):
+    """
+    Keep aligned with `训练代码/1/training.py` stage1_source_feature_learning:
+    - backbone: resnet50
+    - head: Dropout(0.2) + Linear(2048, num_classes)
+    """
+
+    def __init__(self, num_classes: int):
+        super().__init__()
+        base = models.resnet50(weights=None)
+        feat_dim = base.fc.in_features
+        base.fc = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(feat_dim, num_classes),
+        )
+        self.backbone = base
+
+    def forward(self, x):
+        return self.backbone(x)
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        return self.backbone.load_state_dict(state_dict, strict=strict)
+
+
 class JointGrader:
     def __init__(self, model_dir: str, device: torch.device):
         self.model_dir = model_dir
@@ -204,39 +234,135 @@ class JointGrader:
                 return ckpt
         return ckpt
 
+    def _candidate_checkpoint_paths(self, joint: str) -> List[str]:
+        preferred_stage1 = os.path.join(self.model_dir, f"stage1_{joint}_model.pth")
+        preferred_stage1_nested = os.path.join(
+            self.model_dir, joint, f"stage1_{joint}_model.pth"
+        )
+        direct = os.path.join(self.model_dir, f"best_{joint}.pth")
+        nested = os.path.join(self.model_dir, joint, f"best_{joint}.pth")
+
+        candidates: List[str] = []
+        for path in (preferred_stage1, preferred_stage1_nested, direct, nested):
+            if os.path.exists(path):
+                candidates.append(path)
+
+        recursive_patterns = [
+            os.path.join(self.model_dir, "**", f"stage1_{joint}_model.pth"),
+            os.path.join(self.model_dir, "**", f"best_{joint}.pth"),
+        ]
+        for pattern in recursive_patterns:
+            for path in sorted(glob.glob(pattern, recursive=True)):
+                if path not in candidates and os.path.exists(path):
+                    candidates.append(path)
+
+        return candidates
+
+    @staticmethod
+    def _normalize_class_to_idx(class_to_idx: Dict[Any, Any]) -> Dict[int, int]:
+        normalized: Dict[int, int] = {}
+        for raw_cls, idx in class_to_idx.items():
+            normalized[int(raw_cls)] = int(idx)
+        return normalized
+
+    @staticmethod
+    def _infer_num_classes_from_state_dict(
+        state_dict: Dict[str, Any],
+    ) -> Optional[int]:
+        for key in (
+            "fc.1.weight",
+            "fc.weight",
+            "fc.0.weight",
+            "classifier.1.weight",
+            "classifier.weight",
+        ):
+            weight = state_dict.get(key)
+            if torch.is_tensor(weight) and weight.ndim >= 1:
+                return int(weight.shape[0])
+        return None
+
+    @staticmethod
+    def _build_stage1_idx_to_class(num_classes: int) -> Dict[int, int]:
+        # Stage1 training uses numeric grade folders like 1..N and subtracts
+        # 1 only for CrossEntropy labels, so inference must map back with +1.
+        return {idx: idx + 1 for idx in range(num_classes)}
+
+    @staticmethod
+    def _forward_logits(item: Dict[str, Any], x: torch.Tensor) -> torch.Tensor:
+        model_kind = item.get("kind", "dann")
+        model = item["model"]
+        if model_kind == "dann":
+            logits, _, _ = model(x, lambda_grl=0.0)
+            return logits
+        return model(x)
+
     def load_all(self, joint_names: List[str]):
         loaded = 0
         for joint in joint_names:
-            p = os.path.join(self.model_dir, f"best_{joint}.pth")
-            if not os.path.exists(p):
-                print(f"WARNING: joint model not found: {p}")
+            checkpoint_candidates = self._candidate_checkpoint_paths(joint)
+            if not checkpoint_candidates:
+                print(
+                    f"WARNING: joint model not found for {joint} under {self.model_dir}"
+                )
                 continue
 
-            ckpt = torch.load(p, map_location=self.device)
-            class_to_idx = (
-                ckpt.get("class_to_idx", None) if isinstance(ckpt, dict) else None
-            )
-            if not class_to_idx:
-                print(f"WARNING: class_to_idx missing in {p}, skip")
-                continue
+            loaded_this_joint = False
+            for p in checkpoint_candidates:
+                try:
+                    ckpt = torch.load(p, map_location=self.device)
+                    sd = self._extract_state_dict(ckpt)
+                    class_to_idx = (
+                        ckpt.get("class_to_idx", None)
+                        if isinstance(ckpt, dict)
+                        else None
+                    )
+                    model_kind = "dann"
 
-            num_classes = len(class_to_idx)
-            idx_to_class = {v: k for k, v in class_to_idx.items()}
+                    if class_to_idx:
+                        normalized_class_to_idx = self._normalize_class_to_idx(
+                            class_to_idx
+                        )
+                        num_classes = len(normalized_class_to_idx)
+                        idx_to_class = {
+                            v: k for k, v in normalized_class_to_idx.items()
+                        }
 
-            # Strictly match training architecture and enforce strict load.
-            m = DANNHyperModel(num_classes=num_classes)
-            sd = self._extract_state_dict(ckpt)
-            m.load_state_dict(sd, strict=True)
-            m.to(self.device)
-            m.eval()
+                        # Strictly match training architecture and enforce strict load.
+                        m = DANNHyperModel(num_classes=num_classes)
+                        m.load_state_dict(sd, strict=True)
+                    else:
+                        num_classes = self._infer_num_classes_from_state_dict(sd)
+                        if num_classes is None:
+                            print(
+                                f"WARNING: class_to_idx/head metadata missing in {p}, skip"
+                            )
+                            continue
 
-            self.models[joint] = {
-                "model": m,
-                "idx_to_class": idx_to_class,
-                "path": p,
-            }
-            loaded += 1
-            print(f"Loaded joint model: {joint} ({num_classes} classes)")
+                        idx_to_class = self._build_stage1_idx_to_class(num_classes)
+                        m = Stage1JointModel(num_classes=num_classes)
+                        m.load_state_dict(sd, strict=True)
+                        model_kind = "stage1"
+
+                    m.to(self.device)
+                    m.eval()
+
+                    self.models[joint] = {
+                        "model": m,
+                        "kind": model_kind,
+                        "idx_to_class": idx_to_class,
+                        "path": p,
+                    }
+                    loaded += 1
+                    loaded_this_joint = True
+                    print(
+                        f"Loaded joint model: {joint} ({num_classes} classes, {model_kind}) <- {p}"
+                    )
+                    break
+                except Exception as exc:
+                    print(f"WARNING: failed to load joint model {p}: {exc}")
+
+            if not loaded_this_joint:
+                print(f"WARNING: no usable checkpoint found for {joint}")
 
         print(f"Joint models loaded: {loaded}")
 
@@ -302,7 +428,7 @@ class JointGrader:
         out = {}
 
         for joint, item in self.models.items():
-            logits, _, _ = item["model"](x, lambda_grl=0.0)
+            logits = self._forward_logits(item, x)
             probs = torch.softmax(logits, dim=1)
             pred_idx = int(torch.argmax(probs, dim=1).item())
             conf = float(torch.max(probs, dim=1).values.item())
@@ -370,10 +496,10 @@ class JointGrader:
                 }
                 continue
 
-            # The joint classifier was trained on 224x224 crops. Keep the
+            # The stage1 joint classifier was trained on 256x256 crops. Keep the
             # detection canvas size separate from the classifier input size.
             x = self.preprocess_patch(patch, patch_size, mean, std)
-            logits, _, _ = self.models[model_joint]["model"](x, lambda_grl=0.0)
+            logits = self._forward_logits(self.models[model_joint], x)
             probs = torch.softmax(logits, dim=1)
             pred_idx = int(torch.argmax(probs, dim=1).item())
             conf = float(torch.max(probs, dim=1).values.item())
@@ -391,690 +517,10 @@ class JointGrader:
 
 
 # ----------------------------
-# Fracture Detector
+# RUS scoring helper
 # ----------------------------
-class FractureDetector:
-    def __init__(self, model_path: str):
-        providers = (
-            ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if torch.cuda.is_available()
-            else ["CPUExecutionProvider"]
-        )
-        self.session = onnxruntime.InferenceSession(model_path, providers=providers)
-        self.input_name = self.session.get_inputs()[0].name
-        self.output_name = self.session.get_outputs()[0].name
-        self.id2names = {
-            0: "boneanomaly",
-            1: "bonelesion",
-            2: "foreignbody",
-            3: "fracture",
-            4: "metal",
-            5: "periostealreaction",
-            6: "pronatorsign",
-            7: "softtissue",
-            8: "text",
-        }
-
-    def detect(
-        self, image_bytes: bytes, score_threshold: float = 0.3
-    ) -> Tuple[List[Dict], Optional[str]]:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img_orig is None:
-            return [], None
-
-        img_640 = cv2.resize(img_orig, (640, 640), interpolation=cv2.INTER_LINEAR)
-        ok, buf = cv2.imencode(".jpg", img_640)
-        detection_image_base64 = None
-        if ok:
-            detection_image_base64 = "data:image/jpeg;base64," + base64.b64encode(
-                buf
-            ).decode("utf-8")
-
-        img = cv2.cvtColor(img_640, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        img = np.transpose(img, (2, 0, 1))
-        img = np.expand_dims(img, 0)
-        img = np.ascontiguousarray(img)
-
-        outputs = self.session.run([self.output_name], {self.input_name: img})[0]
-        if len(outputs.shape) == 3:
-            outputs = outputs[0]
-
-        anomalies: List[Dict] = []
-        for det in outputs:
-            conf = float(det[4])
-            if conf <= score_threshold:
-                continue
-            anomalies.append(
-                {
-                    "type": self.id2names.get(int(det[5]), "unknown"),
-                    "score": round(conf, 3),
-                    "coord": [
-                        round(float((det[0] + det[2]) / 2 / 640), 4),
-                        round(float((det[1] + det[3]) / 2 / 640), 4),
-                        round(float((det[2] - det[0]) / 640), 4),
-                        round(float((det[3] - det[1]) / 640), 4),
-                    ],
-                }
-            )
-
-        return anomalies, detection_image_base64
-
-
-def _resolve_hand_side(
-    radius_x: Optional[float], ulna_x: Optional[float], fallback: str = "unknown"
-) -> str:
-    if radius_x is None or ulna_x is None:
-        return fallback if fallback in {"left", "right"} else "unknown"
-    return "left" if float(radius_x) > float(ulna_x) else "right"
-
-
-class SmallJointRecognizer:
-    def __init__(self, model_path: str, imgsz: int = 1024, conf: float = 0.2):
-        self.model = YOLO(model_path)
-        self.imgsz = imgsz
-        self.conf = conf
-
-    def _render_with_plt(
-        self,
-        img_bgr: np.ndarray,
-        joints: Dict[str, Dict],
-        hand_side: str,
-        grades: Dict[str, Dict] = None,
-    ) -> Optional[str]:
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        fig = Figure(figsize=(8, 10), dpi=120)
-        canvas = FigureCanvasAgg(fig)
-        ax = fig.add_subplot(111)
-        ax.imshow(img_rgb)
-
-        for name, payload in joints.items():
-            x1, y1, x2, y2 = payload["bbox_xyxy"]
-            rect = Rectangle(
-                (x1, y1),
-                x2 - x1,
-                y2 - y1,
-                fill=False,
-                edgecolor="red",
-                linewidth=2,
-            )
-            ax.add_patch(rect)
-
-            # 基础标签：名称 + 置信度
-            label = f"{name} {payload['score']:.2f}"
-
-            # 如果提供了分级信息，则在标签中加入分级
-            if grades and name in grades:
-                grade = grades[name].get("grade_raw")
-                if grade is not None:
-                    label += f" G:{grade}"
-
-            ax.text(
-                x1,
-                max(0.0, y1 - 6.0),
-                label,
-                color="white",
-                fontsize=8,
-                bbox={"facecolor": "red", "alpha": 0.65, "pad": 1.5},
-            )
-
-        ax.set_title(f"Small Joint Detect | Hand: {hand_side} | Found: {len(joints)}")
-        ax.axis("off")
-        fig.tight_layout()
-        canvas.draw()
-
-        rgba = np.asarray(canvas.buffer_rgba())
-        rgb = rgba[:, :, :3].copy()
-
-        plot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        ok, buf = cv2.imencode(".jpg", plot_bgr)
-        if not ok:
-            return None
-
-        return "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
-
-    def recognize_13(self, image_bytes: bytes) -> Dict:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img_bgr_orig is None:
-            return {
-                "hand_side": "unknown",
-                "detected_count": 0,
-                "joints": {},
-                "plot_image_base64": None,
-            }
-
-        h, w = img_bgr_orig.shape[:2]
-        img_bgr = cv2.resize(img_bgr_orig, (self.imgsz, self.imgsz))
-        result = self.model.predict(
-            source=img_bgr,
-            imgsz=self.imgsz,
-            conf=self.conf,
-            verbose=True,
-        )[0]
-
-        all_d = []
-        radius_x = None
-        ulna_x = None
-        for box in result.boxes:
-            coords = box.xyxy[0].cpu().numpy()
-            cls_id = int(box.cls[0])
-            lbl = result.names[cls_id]
-            score = float(box.conf[0])
-            cx = float((coords[0] + coords[2]) / 2.0)
-            all_d.append({"lbl": lbl, "cx": cx, "box": coords, "score": score})
-            if lbl == "Radius":
-                radius_x = cx
-            elif lbl == "Ulna":
-                ulna_x = cx
-
-        hand_side = _resolve_hand_side(radius_x, ulna_x)
-
-        final_13: Dict[str, Dict] = {}
-
-        def map_finger_logic(
-            yolo_lbl: str,
-            target_prefix: str,
-            finger_indices: List[int],
-            target_suffixes: List[str],
-        ):
-            subset = [d for d in all_d if d["lbl"] == yolo_lbl]
-            if hand_side == "unknown":
-                subset = sorted(subset, key=lambda x: x["cx"])
-            else:
-                subset = sorted(
-                    subset,
-                    key=lambda x: x["cx"],
-                    reverse=(hand_side == "right"),
-                )
-
-            for idx, suffix in zip(finger_indices, target_suffixes):
-                if len(subset) > idx:
-                    final_13[f"{target_prefix}{suffix}"] = subset[idx]
-
-        for d in all_d:
-            if d["lbl"] == "Radius" and "Radius" not in final_13:
-                final_13["Radius"] = d
-            elif d["lbl"] == "Ulna" and "Ulna" not in final_13:
-                final_13["Ulna"] = d
-
-        map_finger_logic("MCP", "MCP", [0, 2, 4], ["First", "Third", "Fifth"])
-        map_finger_logic(
-            "ProximalPhalanx", "PIP", [0, 2, 4], ["First", "Third", "Fifth"]
-        )
-        map_finger_logic("MiddlePhalanx", "MIP", [1, 2], ["Third", "Fifth"])
-        map_finger_logic("DistalPhalanx", "DIP", [0, 2, 4], ["First", "Third", "Fifth"])
-
-        joints: Dict[str, Dict] = {}
-        scale_x = w / self.imgsz
-        scale_y = h / self.imgsz
-        for name, info in final_13.items():
-            b = info["box"]
-            x1, y1, x2, y2 = map(float, b.tolist())
-            x1_orig = x1 * scale_x
-            y1_orig = y1 * scale_y
-            x2_orig = x2 * scale_x
-            y2_orig = y2 * scale_y
-            joints[name] = {
-                "type": name,
-                "score": round(float(info["score"]), 4),
-                "bbox_xyxy": [
-                    round(x1_orig, 2),
-                    round(y1_orig, 2),
-                    round(x2_orig, 2),
-                    round(y2_orig, 2),
-                ],
-                "bbox_space": "original",
-                "coord": [
-                    round((x1_orig + x2_orig) / 2.0 / w, 4),
-                    round((y1_orig + y2_orig) / 2.0 / h, 4),
-                    round((x2_orig - x1_orig) / w, 4),
-                    round((y2_orig - y1_orig) / h, 4),
-                ],
-            }
-
-        plot_image_base64 = self._render_with_plt(img_bgr_orig, joints, hand_side)
-        return {
-            "hand_side": hand_side,
-            "detected_count": len(joints),
-            "joints": joints,
-            "plot_image_base64": plot_image_base64,
-        }
-
-
-# ----------------------------
-# RUS semantic alignment
-# ----------------------------
-RUS_13 = [
-    "Radius",
-    "Ulna",
-    "MCPFirst",
-    "MCPThird",
-    "MCPFifth",
-    "PIPFirst",
-    "PIPThird",
-    "PIPFifth",
-    "MIPThird",
-    "MIPFifth",
-    "DIPFirst",
-    "DIPThird",
-    "DIPFifth",
-]
-
-JOINT_TO_RUS = {
-    "Radius": ["Radius"],
-    "Ulna": ["Ulna"],
-    "MCPFirst": ["MCPFirst"],
-    "MCP": ["MCPThird", "MCPFifth"],
-    "PIPFirst": ["PIPFirst"],
-    "PIP": ["PIPThird", "PIPFifth"],
-    "MIP": ["MIPThird", "MIPFifth"],
-    "DIPFirst": ["DIPFirst"],
-    "DIP": ["DIPThird", "DIPFifth"],
-}
-
-FALLBACKS = {
-    "Radius": ["Ulna"],
-    "Ulna": ["Radius"],
-    "MCPFirst": ["MCPThird", "MCPFifth"],
-    "MCPThird": ["MCPFirst", "MCPFifth"],
-    "MCPFifth": ["MCPThird", "MCPFirst"],
-    "PIPFirst": ["PIPThird", "PIPFifth"],
-    "PIPThird": ["PIPFirst", "PIPFifth"],
-    "PIPFifth": ["PIPThird", "PIPFirst"],
-    "MIPThird": ["MIPFifth", "PIPThird"],
-    "MIPFifth": ["MIPThird", "PIPFifth"],
-    "DIPFirst": ["DIPThird", "DIPFifth"],
-    "DIPThird": ["DIPFirst", "DIPFifth"],
-    "DIPFifth": ["DIPThird", "DIPFirst"],
-}
-
-DETECTED_JOINT_FALLBACKS = {
-    "Radius": ["Ulna"],
-    "Ulna": ["Radius"],
-    "MCPFirst": ["MCPSecond", "MCPThird"],
-    "MCPThird": ["MCPSecond", "MCPFourth", "MCPFifth", "MCPFirst"],
-    "MCPFifth": ["MCPFourth", "MCPThird", "MCPSecond"],
-    "PIPFirst": ["PIPSecond", "PIPThird"],
-    "PIPThird": ["PIPSecond", "PIPFourth", "PIPFifth", "PIPFirst"],
-    "PIPFifth": ["PIPFourth", "PIPThird", "PIPSecond"],
-    "MIPThird": ["MIPSecond", "MIPFourth", "MIPFifth"],
-    "MIPFifth": ["MIPFourth", "MIPThird", "MIPSecond"],
-    "DIPFirst": ["DIPSecond", "DIPThird"],
-    "DIPThird": ["DIPSecond", "DIPFourth", "DIPFifth", "DIPFirst"],
-    "DIPFifth": ["DIPFourth", "DIPThird", "DIPSecond"],
-}
-
-FINGER_LABELS_EN = ["First", "Second", "Third", "Fourth", "Fifth"]
-FINGER_LABELS_CN = {
-    "First": "拇指",
-    "Second": "食指",
-    "Third": "中指",
-    "Fourth": "环指",
-    "Fifth": "小指",
-}
-DPV3_PREFIX_RENAME_CONFIG = {
-    "MCP": {
-        "source_labels": {"MCPFirst", "MCP"},
-        "joint_names": ["MCPFirst", "MCPSecond", "MCPThird", "MCPFourth", "MCPFifth"],
-        "expected_count": 5,
-    },
-    "PIP": {
-        "source_labels": {"ProximalPhalanx"},
-        "joint_names": ["PIPFirst", "PIPSecond", "PIPThird", "PIPFourth", "PIPFifth"],
-        "expected_count": 5,
-    },
-    "MIP": {
-        "source_labels": {"MiddlePhalanx"},
-        "joint_names": ["MIPSecond", "MIPThird", "MIPFourth", "MIPFifth"],
-        "expected_count": 4,
-    },
-    "DIP": {
-        "source_labels": {"DistalPhalanx"},
-        "joint_names": ["DIPFirst", "DIPSecond", "DIPThird", "DIPFourth", "DIPFifth"],
-        "expected_count": 5,
-    },
-}
-
-
-def _region_center_x(region: Dict) -> float:
-    centroid = region.get("centroid", (0.0, 0.0))
-    if isinstance(centroid, (list, tuple)) and centroid:
-        return float(centroid[0])
-    return 0.0
-
-
-def _region_center_y(region: Dict) -> float:
-    centroid = region.get("centroid", (0.0, 0.0))
-    if isinstance(centroid, (list, tuple)) and len(centroid) > 1:
-        return float(centroid[1])
-    return 0.0
-
-
-def _region_confidence(region: Dict) -> float:
-    return float(region.get("confidence", 0.0))
-
-
-def _region_bbox(region: Dict) -> Tuple[float, float, float, float]:
-    bbox = region.get("bbox_coords", [0.0, 0.0, 0.0, 0.0])
-    if len(bbox) != 4:
-        return 0.0, 0.0, 0.0, 0.0
-    return tuple(float(v) for v in bbox)
-
-
-def _bbox_iou(
-    box_a: Tuple[float, float, float, float], box_b: Tuple[float, float, float, float]
-) -> float:
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-
-    inter_w = max(0.0, inter_x2 - inter_x1)
-    inter_h = max(0.0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
-    denom = area_a + area_b - inter_area
-    if denom <= 0:
-        return 0.0
-    return inter_area / denom
-
-
-def _dedupe_regions_by_overlap(
-    regions: List[Dict], expected_count: int, iou_threshold: float = 0.35
-) -> List[Dict]:
-    if not regions:
-        return []
-
-    ordered_by_conf = sorted(
-        regions,
-        key=lambda item: (
-            _region_confidence(item),
-            _region_bbox(item)[2] - _region_bbox(item)[0],
-        ),
-        reverse=True,
-    )
-
-    kept: List[Dict] = []
-    for region in ordered_by_conf:
-        region_box = _region_bbox(region)
-        if any(
-            _bbox_iou(region_box, _region_bbox(existing)) >= iou_threshold
-            for existing in kept
-        ):
-            continue
-        kept.append(region)
-
-    if len(kept) > expected_count:
-        kept = kept[:expected_count]
-
-    return kept
-
-
-def _order_regions_by_hand_side(regions: List[Dict], hand_side: str) -> List[Dict]:
-    ordered = sorted(regions, key=_region_center_x)
-    if hand_side == "left":
-        ordered.reverse()
-    return ordered
-
-
-def _joint_name_to_finger(joint_name: str) -> str:
-    for finger in FINGER_LABELS_EN:
-        if joint_name.endswith(finger):
-            return finger
-    return "Wrist"
-
-
-def _build_named_joint_payload(
-    region: Dict, joint_name: str, image_shape: Tuple[int, int], order: int
-) -> Dict:
-    img_h, img_w = image_shape
-    label = region.get("label", "Unknown")
-    label_cn = region.get("label_cn", label)
-    x1, y1, x2, y2 = _region_bbox(region)
-    finger = _joint_name_to_finger(joint_name)
-    finger_cn = FINGER_LABELS_CN.get(finger, "腕骨")
-
-    return {
-        "type": label_cn,
-        "label": joint_name,
-        "yolo_label": label,
-        "finger": finger,
-        "finger_cn": finger_cn,
-        "order": order,
-        "score": round(_region_confidence(region), 4),
-        "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
-        "bbox_space": "original",
-        "source": region.get("source", "unknown"),
-        "coord": [
-            round(_region_center_x(region) / img_w, 4) if img_w else 0.0,
-            round(_region_center_y(region) / img_h, 4) if img_h else 0.0,
-            round((x2 - x1) / img_w, 4) if img_w else 0.0,
-            round((y2 - y1) / img_h, 4) if img_h else 0.0,
-        ],
-    }
-
-
-def _resolve_hand_side_from_regions(
-    regions: List[Dict], fallback: str = "unknown"
-) -> str:
-    radius_regions = [region for region in regions if region.get("label") == "Radius"]
-    ulna_regions = [region for region in regions if region.get("label") == "Ulna"]
-    if radius_regions and ulna_regions:
-        radius_region = max(radius_regions, key=_region_confidence)
-        ulna_region = max(ulna_regions, key=_region_confidence)
-        return _resolve_hand_side(
-            _region_center_x(radius_region),
-            _region_center_x(ulna_region),
-            fallback=fallback,
-        )
-    return fallback if fallback in {"left", "right"} else "unknown"
-
-
-def rename_dpv3_regions_to_named_joints(
-    regions: List[Dict],
-    image_shape: Tuple[int, int],
-    hand_side_hint: str = "unknown",
-) -> Tuple[Dict[str, Dict], List[Dict], str]:
-    img_h, img_w = image_shape
-    hand_side = _resolve_hand_side_from_regions(regions, hand_side_hint)
-    joints: Dict[str, Dict] = {}
-    ordered_joints: List[Dict] = []
-    joint_index = 0
-
-    for wrist_label in ["Radius", "Ulna"]:
-        wrist_regions = [
-            region for region in regions if region.get("label") == wrist_label
-        ]
-        if not wrist_regions:
-            continue
-        wrist_region = max(wrist_regions, key=_region_confidence)
-        payload = _build_named_joint_payload(
-            wrist_region, wrist_label, (img_h, img_w), joint_index
-        )
-        joints[wrist_label] = payload
-        ordered_joints.append(payload)
-        joint_index += 1
-
-    for prefix, config in DPV3_PREFIX_RENAME_CONFIG.items():
-        prefix_regions = [
-            region
-            for region in regions
-            if region.get("label") in config["source_labels"]
-        ]
-        if not prefix_regions:
-            continue
-
-        deduped_regions = _dedupe_regions_by_overlap(
-            prefix_regions, config["expected_count"]
-        )
-        ordered_regions = _order_regions_by_hand_side(deduped_regions, hand_side)
-
-        for joint_name, region in zip(
-            config["joint_names"], ordered_regions[: len(config["joint_names"])]
-        ):
-            payload = _build_named_joint_payload(
-                region, joint_name, (img_h, img_w), joint_index
-            )
-            joints[joint_name] = payload
-            ordered_joints.append(payload)
-            joint_index += 1
-
-    return joints, ordered_joints, hand_side
-
-
-def align_joint_semantics(joint_grades: Dict) -> Dict:
-    aligned: Dict[str, Dict] = {}
-
-    for src_joint, payload in joint_grades.items():
-        if payload.get("grade_raw", None) is None:
-            continue
-        if src_joint in RUS_13:
-            targets = [src_joint]
-        else:
-            targets = JOINT_TO_RUS.get(src_joint, [])
-        for t in targets:
-            aligned[t] = {
-                "grade_raw": int(payload.get("grade_raw", 0)),
-                "score": float(payload.get("score", 0.0)),
-                "status": payload.get("status", "ok"),
-                "source_joint": src_joint,
-                "imputed": False,
-            }
-
-    for rus_joint in RUS_13:
-        if rus_joint in aligned:
-            continue
-        cand = FALLBACKS.get(rus_joint, [])
-        picked = None
-        for c in cand:
-            if c in aligned:
-                picked = c
-                break
-        if picked is not None:
-            aligned[rus_joint] = {
-                "grade_raw": aligned[picked]["grade_raw"],
-                "score": aligned[picked]["score"] * 0.95,
-                "status": "semantic_imputed",
-                "source_joint": aligned[picked]["source_joint"],
-                "imputed": True,
-            }
-        else:
-            aligned[rus_joint] = {
-                "grade_raw": 0,
-                "score": 0.0,
-                "status": "semantic_default",
-                "source_joint": "none",
-                "imputed": True,
-            }
-
-    return aligned
-
-
 def calc_rus_score(aligned_13: Dict, gender: str):
     return calc_rus_score_util(aligned_13, gender)
-
-
-def semantic_align_missing_joint_grades(joint_grades: Dict) -> Dict:
-    """
-    对没有对应模型或裁剪失败的关节做语义补全。
-    规则:
-    - 仅补全 grade_raw 为空的关节
-    - 使用 FALLBACKS 中的候选关节
-    - 置信度做轻微折减，并标记 imputed
-    """
-    if not joint_grades:
-        return {}
-
-    aligned = dict(joint_grades)
-    for joint in RUS_13:
-        payload = aligned.get(joint)
-        if payload and payload.get("grade_raw", None) is not None:
-            payload["imputed"] = False
-            aligned[joint] = payload
-            continue
-
-        picked = None
-        for cand in FALLBACKS.get(joint, []):
-            c = aligned.get(cand)
-            if c and c.get("grade_raw", None) is not None:
-                picked = c
-                picked_name = cand
-                break
-
-        if picked is None:
-            base = payload if isinstance(payload, dict) else {}
-            aligned[joint] = {
-                "model_joint": base.get("model_joint", None),
-                "grade_idx": None,
-                "grade_raw": 0,
-                "score": 0.0,
-                "status": "semantic_default",
-                "imputed": True,
-                "source_joint": "none",
-            }
-            continue
-
-        base_score = float(picked.get("score", 0.0))
-        aligned[joint] = {
-            "model_joint": picked.get("model_joint", None),
-            "grade_idx": picked.get("grade_idx", None),
-            "grade_raw": int(picked.get("grade_raw", 0)),
-            "score": round(base_score * 0.95, 4),
-            "status": "semantic_imputed",
-            "imputed": True,
-            "source_joint": picked_name,
-        }
-
-    return aligned
-
-
-def standardize_detected_joints_to_rus(
-    detected_joints: Dict[str, Dict],
-) -> Dict[str, Dict]:
-    """
-    将 21 点检测结果收敛为 RUS-13 标准关节视图。
-    - 优先使用同名关节
-    - 若标准关节缺失，则从 Second/Fourth 或相邻同类关节中回退
-    """
-    if not detected_joints:
-        return {}
-
-    standardized: Dict[str, Dict] = {}
-    for rus_joint in RUS_13:
-        if rus_joint in detected_joints:
-            standardized[rus_joint] = {
-                **detected_joints[rus_joint],
-                "standard_joint": rus_joint,
-                "source_joint": rus_joint,
-                "imputed": False,
-            }
-            continue
-
-        picked_name = None
-        for candidate in DETECTED_JOINT_FALLBACKS.get(rus_joint, []):
-            if candidate in detected_joints:
-                picked_name = candidate
-                break
-
-        if picked_name is None:
-            continue
-
-        standardized[rus_joint] = {
-            **detected_joints[picked_name],
-            "standard_joint": rus_joint,
-            "source_joint": picked_name,
-            "imputed": True,
-        }
-
-    return standardized
 
 
 # ----------------------------
@@ -1114,7 +560,7 @@ DEFAULT_AGE_MIN = 1.0
 DEFAULT_AGE_MAX = 228.0
 
 IMG_SIZE = 256
-JOINT_MODEL_INPUT_SIZE = 224
+JOINT_MODEL_INPUT_SIZE = IMG_SIZE
 JOINT_DETECTION_CANVAS_SIZE = 1024
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
@@ -1964,66 +1410,6 @@ def _validate_notification_recipient(method: str, recipient: str) -> str:
     )
 
 
-def _sse_event(payload: Dict[str, Any]) -> str:
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-
-async def _stream_deepseek_chat(
-    messages: List[Dict[str, Any]],
-    temperature: float,
-    *,
-    timeout_seconds: float,
-    error_prefix: str,
-):
-    api_url = DEEPSEEK_API_BASE.rstrip("/") + "/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "model": DEEPSEEK_MODEL,
-        "messages": messages,
-        "temperature": temperature,
-        "stream": True,
-    }
-
-    try:
-        timeout = httpx.Timeout(timeout_seconds)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream(
-                "POST",
-                api_url,
-                headers=headers,
-                json=body,
-            ) as resp:
-                if resp.status_code >= 400:
-                    error_text = (await resp.aread()).decode("utf-8", "ignore")[:400]
-                    yield _sse_event({"error": f"{error_prefix}: {error_text}"})
-                    return
-
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        yield "data: [DONE]\n\n"
-                        return
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-
-                    choices = data.get("choices", [])
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        yield _sse_event({"content": content})
-    except Exception as exc:
-        yield _sse_event({"error": f"{error_prefix}: {exc}"})
-
-
 # ----------------------------
 # Utils
 # ----------------------------
@@ -2157,170 +1543,6 @@ def prepare_analysis_image_bytes(
     except Exception as exc:
         print(f"Image preprocessing failed, fallback to original bytes: {exc}")
         return image_bytes
-
-
-def run_joint_assessment_pipeline(
-    image_bytes: bytes,
-    gender_lower: str,
-    use_dpv3: bool = False,
-) -> Dict[str, Any]:
-    recognized_joints_13: Dict[str, Any] = {
-        "hand_side": "unknown",
-        "detected_count": 0,
-        "joints": {},
-        "plot_image_base64": None,
-        "dpv3_enhanced": False,
-        "dpv3_info": None,
-    }
-
-    if use_dpv3 and dpv3_detector:
-        try:
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if img_bgr is not None:
-                dpv3_results = dpv3_detector.detect(img_bgr, target_count=21)
-                if dpv3_results.get("success"):
-                    recognized_joints_13["dpv3_enhanced"] = True
-
-                    radius_region = None
-                    ulna_region = None
-                    for region in dpv3_results.get("regions", []):
-                        label = region.get("label", "Unknown")
-                        if label == "Radius":
-                            radius_region = region
-                        elif label == "Ulna":
-                            ulna_region = region
-
-                    if radius_region and ulna_region:
-                        radius_x = radius_region.get("centroid", (0, 0))[0]
-                        ulna_x = ulna_region.get("centroid", (0, 0))[0]
-                        hand_side = _resolve_hand_side(
-                            radius_x,
-                            ulna_x,
-                            fallback=dpv3_results.get("hand_side", "unknown"),
-                        )
-                    else:
-                        hand_side = dpv3_results.get("hand_side", "unknown")
-
-                    joints, ordered_joints, hand_side = (
-                        rename_dpv3_regions_to_named_joints(
-                            dpv3_results.get("regions", []),
-                            img_bgr.shape[:2],
-                            hand_side,
-                        )
-                    )
-
-                    recognized_joints_13["dpv3_info"] = {
-                        "hand_side": hand_side,
-                        "total_regions": dpv3_results.get("total_regions"),
-                        "yolo_count": dpv3_results.get("yolo_count"),
-                        "bfs_count": dpv3_results.get("bfs_count"),
-                        "best_gray_range": dpv3_results.get("best_gray_range"),
-                        "merged_blocks": dpv3_results.get("merged_blocks"),
-                    }
-                    recognized_joints_13["detected_count"] = len(joints)
-                    recognized_joints_13["hand_side"] = hand_side
-                    recognized_joints_13["joints"] = joints
-                    recognized_joints_13["ordered_joints"] = ordered_joints
-                    recognized_joints_13["finger_order"] = (
-                        FINGER_LABELS_EN
-                        if hand_side == "left"
-                        else list(reversed(FINGER_LABELS_EN))
-                    )
-                    recognized_joints_13["rus_13_joints"] = (
-                        standardize_detected_joints_to_rus(joints)
-                    )
-                    print(
-                        f"✅ DP V3 enhanced detection: {recognized_joints_13['detected_count']} bones detected"
-                    )
-        except Exception as dpv3_exc:
-            print(f"DP V3 detection failed: {dpv3_exc}")
-            import traceback
-
-            traceback.print_exc()
-
-    if not recognized_joints_13.get("dpv3_enhanced"):
-        if joint_recognizer:
-            try:
-                recognized_joints_13 = joint_recognizer.recognize_13(image_bytes)
-                recognized_joints_13["dpv3_enhanced"] = False
-                recognized_joints_13["dpv3_info"] = None
-            except Exception as rec_exc:
-                print(f"Small joint recognize failed: {rec_exc}")
-
-        recognized_joints_13.setdefault("hand_side", "unknown")
-        recognized_joints_13.setdefault("detected_count", 0)
-        recognized_joints_13.setdefault("joints", {})
-        recognized_joints_13.setdefault("plot_image_base64", None)
-
-    joint_grades: Dict[str, Any] = {}
-    if joint_grader:
-        try:
-            joint_grades = joint_grader.predict_detected_joints(
-                image_bytes,
-                recognized_joints_13.get("joints", {}),
-                JOINT_DETECTION_CANVAS_SIZE,
-                JOINT_MODEL_INPUT_SIZE,
-                IMAGENET_MEAN,
-                IMAGENET_STD,
-            )
-        except Exception as joint_exc:
-            print(f"Joint grading failed: {joint_exc}")
-
-    joint_grades = semantic_align_missing_joint_grades(joint_grades)
-
-    joint_semantic_13: Dict[str, Any] = {}
-    joint_rus_total_score = None
-    joint_rus_details: List[Dict[str, Any]] = []
-    rus_bone_age_years = None
-    if joint_grades:
-        joint_semantic_13 = align_joint_semantics(joint_grades)
-        joint_rus_total_score, joint_rus_details = calc_rus_score(
-            joint_semantic_13, gender_lower
-        )
-        if joint_rus_total_score is not None and (
-            math.isnan(joint_rus_total_score) or math.isinf(joint_rus_total_score)
-        ):
-            joint_rus_total_score = 0.0
-        if joint_rus_total_score is not None:
-            rus_bone_age_years = calc_bone_age_from_score(
-                joint_rus_total_score, gender_lower
-            )
-
-    if joint_recognizer and joint_grades:
-        try:
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img_bgr_orig = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if img_bgr_orig is not None:
-                new_plot = joint_recognizer._render_with_plt(
-                    img_bgr_orig,
-                    recognized_joints_13.get("joints", {}),
-                    recognized_joints_13.get("hand_side", "unknown"),
-                    grades=joint_grades,
-                )
-                if new_plot:
-                    recognized_joints_13["plot_image_base64"] = new_plot
-        except Exception as plot_exc:
-            print(f"Re-rendering plot with grades failed: {plot_exc}")
-            import traceback
-
-            traceback.print_exc()
-
-    recognized_joints_13["rus_13_joints"] = standardize_detected_joints_to_rus(
-        recognized_joints_13.get("joints", {})
-    )
-
-    return {
-        "joint_detect_13": recognized_joints_13,
-        "joint_grades": joint_grades,
-        "joint_semantic_13": joint_semantic_13,
-        "joint_rus_total_score": joint_rus_total_score,
-        "joint_rus_details": joint_rus_details,
-        "rus_bone_age_years": rus_bone_age_years,
-        "detection_algorithm": "dpv3"
-        if recognized_joints_13.get("dpv3_enhanced")
-        else "yolo",
-    }
 
 
 # ----------------------------
@@ -2828,12 +2050,6 @@ class BoneAgePointCreateRequest(BaseModel):
     note: str = Field(default="", max_length=500)
 
 
-class DoctorAssistantRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
-    prediction_id: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
-
-
 def _fetch_prediction_row_for_session(
     pred_id: str, session: sqlite3.Row
 ) -> sqlite3.Row:
@@ -3148,6 +2364,13 @@ async def predict_bone_age(
         joint_analysis = run_joint_assessment_pipeline(
             processed_content,
             gender_lower,
+            joint_grader=joint_grader,
+            joint_recognizer=joint_recognizer,
+            dpv3_detector=dpv3_detector,
+            joint_detection_canvas_size=JOINT_DETECTION_CANVAS_SIZE,
+            joint_model_input_size=JOINT_MODEL_INPUT_SIZE,
+            imagenet_mean=IMAGENET_MEAN,
+            imagenet_std=IMAGENET_STD,
             use_dpv3=use_dpv3,
         )
         recognized_joints_13 = joint_analysis["joint_detect_13"]
@@ -3575,12 +2798,11 @@ def get_bone_age_trend(request: Request, user_id: Optional[int] = Query(default=
 
 
 @app.post("/doctor/ai-assistant")
-async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request):
+async def doctor_ai_assistant(
+    payload: ai_consult.DoctorAssistantRequest, request: Request
+):
     _require_doctor(request)
-    if not DEEPSEEK_API_KEY:
-        raise HTTPException(
-            status_code=503, detail="DEEPSEEK_API_KEY is not configured"
-        )
+    ai_consult.ensure_api_key(DEEPSEEK_API_KEY, "DEEPSEEK_API_KEY is not configured")
 
     context_chunks: List[str] = []
     if payload.context:
@@ -3596,22 +2818,16 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
                 f"预测记录[{payload.prediction_id}]: {row['full_json'][:4000]}"
             )
 
-    system_prompt = (
-        "你是骨龄辅助诊断AI，请输出临床可用、谨慎、结构化建议。"
-        "请明确说明不确定性，不可替代医生最终判断。"
+    messages = ai_consult.build_doctor_assistant_messages(
+        payload.message, context_chunks
     )
-    user_prompt = payload.message.strip()
-    if context_chunks:
-        user_prompt = user_prompt + "\n\n" + "\n".join(context_chunks)
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
     return StreamingResponse(
-        _stream_deepseek_chat(
-            messages,
-            0.2,
+        ai_consult.stream_deepseek_chat(
+            api_key=DEEPSEEK_API_KEY,
+            api_base=DEEPSEEK_API_BASE,
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.2,
             timeout_seconds=DEEPSEEK_TIMEOUT_SECONDS,
             error_prefix="AI assistant failed",
         ),
@@ -3619,35 +2835,25 @@ async def doctor_ai_assistant(payload: DoctorAssistantRequest, request: Request)
     )
 
 
-class UserConsultRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
-
-
-@app.post("/user/ai-consult")
-async def user_ai_consult(payload: UserConsultRequest, request: Request):
-    """患者智能问诊接口：任意已登录用户均可调用，prompt 偏向健康科普与就医指导。"""
-    _require_session(request)
-    if not DEEPSEEK_API_KEY:
-        raise HTTPException(
-            status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥"
-        )
-
-    system_prompt = (
-        "你是一位友好、专业的骨龄与儿童生长发育健康顾问。"
-        "你的角色是向患者及家长提供通俗易懂的健康科普解释，帮助他们理解骨龄概念、发育规律以及相关注意事项。"
-        "请用温和、清晰、易理解的语言回答，避免使用晦涩的专业术语。"
-        "对于需要临床检查或诊断的问题，请明确建议用户就诊，不替代医生专业判断。"
-        "回答时请结构清晰，必要时使用条目列表。"
+@app.post("/public/ai-consult")
+async def public_ai_consult(payload: ai_consult.PublicConsultRequest):
+    """公开 AI 小助手接口：统一通过后端代理 DeepSeek，供首页浮窗等无登录场景使用。"""
+    ai_consult.ensure_api_key(
+        DEEPSEEK_API_KEY, "智能问诊服务暂未开放，请联系管理员配置 API 密钥"
     )
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": payload.message.strip()},
-    ]
+    messages = ai_consult.build_consult_messages(
+        system_prompt=ai_consult.build_consult_system_prompt(),
+        message=payload.message,
+        history=payload.history,
+    )
     return StreamingResponse(
-        _stream_deepseek_chat(
-            messages,
-            0.4,
+        ai_consult.stream_deepseek_chat(
+            api_key=DEEPSEEK_API_KEY,
+            api_base=DEEPSEEK_API_BASE,
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.4,
             timeout_seconds=DEEPSEEK_TIMEOUT_SECONDS,
             error_prefix="智能问诊失败",
         ),
@@ -3655,49 +2861,83 @@ async def user_ai_consult(payload: UserConsultRequest, request: Request):
     )
 
 
-class ImageConsultRequest(BaseModel):
-    message: str = Field(default="", max_length=2000)
-    image_base64: str = Field(..., description="Base64 encoded image data")
+@app.post("/user/ai-consult")
+async def user_ai_consult(payload: ai_consult.UserConsultRequest, request: Request):
+    """患者智能问诊接口：任意已登录用户均可调用，prompt 偏向健康科普与就医指导。"""
+    _require_session(request)
+    ai_consult.ensure_api_key(
+        DEEPSEEK_API_KEY, "智能问诊服务暂未开放，请联系管理员配置 API 密钥"
+    )
+
+    messages = ai_consult.build_consult_messages(
+        system_prompt=ai_consult.build_consult_system_prompt(),
+        message=payload.message,
+        history=[],
+    )
+    return StreamingResponse(
+        ai_consult.stream_deepseek_chat(
+            api_key=DEEPSEEK_API_KEY,
+            api_base=DEEPSEEK_API_BASE,
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.4,
+            timeout_seconds=DEEPSEEK_TIMEOUT_SECONDS,
+            error_prefix="智能问诊失败",
+        ),
+        media_type="text/event-stream",
+    )
+
+
+@app.post("/public/ai-consult-image")
+async def public_ai_consult_with_image(payload: ai_consult.ImageConsultRequest):
+    """公开 AI 图片问诊接口：统一通过后端代理 DeepSeek，供首页浮窗等无登录场景使用。"""
+    ai_consult.ensure_api_key(
+        DEEPSEEK_API_KEY, "智能问诊服务暂未开放，请联系管理员配置 API 密钥"
+    )
+
+    messages = ai_consult.build_consult_messages(
+        system_prompt=ai_consult.build_consult_system_prompt(include_image=True),
+        message=payload.message,
+        history=payload.history,
+        image_base64=payload.image_base64,
+    )
+    return StreamingResponse(
+        ai_consult.stream_deepseek_chat(
+            api_key=DEEPSEEK_API_KEY,
+            api_base=DEEPSEEK_API_BASE,
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.4,
+            timeout_seconds=max(DEEPSEEK_TIMEOUT_SECONDS, 120.0),
+            error_prefix="智能问诊失败",
+        ),
+        media_type="text/event-stream",
+    )
 
 
 @app.post("/user/ai-consult-image")
-async def user_ai_consult_with_image(payload: ImageConsultRequest, request: Request):
+async def user_ai_consult_with_image(
+    payload: ai_consult.ImageConsultRequest, request: Request
+):
     """患者智能问诊接口（支持图片）：用户可上传X光片等图片进行问诊"""
     _require_session(request)
-    if not DEEPSEEK_API_KEY:
-        raise HTTPException(
-            status_code=503, detail="智能问诊服务暂未开放，请联系管理员配置 API 密钥"
-        )
-
-    system_prompt = (
-        "你是一位友好、专业的骨龄与儿童生长发育健康顾问。"
-        "你的角色是向患者及家长提供通俗易懂的健康科普解释，帮助他们理解骨龄概念、发育规律以及相关注意事项。"
-        "请用温和、清晰、易理解的语言回答，避免使用晦涩的专业术语。"
-        "对于需要临床检查或诊断的问题，请明确建议用户就诊，不替代医生专业判断。"
-        "回答时请结构清晰，必要时使用条目列表。"
-        "如果用户上传了X光片图片，请仔细观察并给出专业的解读建议。"
+    ai_consult.ensure_api_key(
+        DEEPSEEK_API_KEY, "智能问诊服务暂未开放，请联系管理员配置 API 密钥"
     )
 
-    user_content = []
-    if payload.message.strip():
-        user_content.append({"type": "text", "text": payload.message.strip()})
-    else:
-        user_content.append({"type": "text", "text": "请帮我分析这张图片"})
-
-    if payload.image_base64:
-        image_data = payload.image_base64
-        if not image_data.startswith("data:"):
-            image_data = f"data:image/jpeg;base64,{image_data}"
-        user_content.append({"type": "image_url", "image_url": {"url": image_data}})
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
+    messages = ai_consult.build_consult_messages(
+        system_prompt=ai_consult.build_consult_system_prompt(include_image=True),
+        message=payload.message,
+        history=[],
+        image_base64=payload.image_base64,
+    )
     return StreamingResponse(
-        _stream_deepseek_chat(
-            messages,
-            0.4,
+        ai_consult.stream_deepseek_chat(
+            api_key=DEEPSEEK_API_KEY,
+            api_base=DEEPSEEK_API_BASE,
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.4,
             timeout_seconds=max(DEEPSEEK_TIMEOUT_SECONDS, 120.0),
             error_prefix="智能问诊失败",
         ),
@@ -3759,6 +2999,13 @@ async def joint_grading_predict(
         joint_analysis = run_joint_assessment_pipeline(
             processed_content,
             gender_lower,
+            joint_grader=joint_grader,
+            joint_recognizer=joint_recognizer,
+            dpv3_detector=dpv3_detector,
+            joint_detection_canvas_size=JOINT_DETECTION_CANVAS_SIZE,
+            joint_model_input_size=JOINT_MODEL_INPUT_SIZE,
+            imagenet_mean=IMAGENET_MEAN,
+            imagenet_std=IMAGENET_STD,
             use_dpv3=use_dpv3,
         )
         recognized_joints_13 = joint_analysis["joint_detect_13"]

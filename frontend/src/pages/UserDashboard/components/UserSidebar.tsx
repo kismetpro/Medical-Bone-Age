@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Settings, Image as ImageIcon, TrendingUp, Hand } from 'lucide-react';
+import { Activity, History as HistoryIcon, MessageSquare, Bot, User as UserIcon, LogOut, Settings, Image as ImageIcon, TrendingUp } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import styles from '../UserDashboard.module.css';
 

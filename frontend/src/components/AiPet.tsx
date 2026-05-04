@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Image as ImageIcon, User } from 'lucide-react';
 import AI_LOGO from '../static/AI_logo.jpg';
+import { API_BASE } from '../config';
 
 interface Message {
   role: 'user' | 'ai';
@@ -83,6 +84,13 @@ const AiPet = () => {
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || loading) return;
 
+    const history = messages
+      .filter((message) => Boolean(message.content?.trim()))
+      .map((message) => ({
+        role: message.role === 'ai' ? 'assistant' : 'user',
+        content: message.content.trim(),
+      }));
+
     const userMsg: Message = {
       role: 'user',
       content: input,
@@ -107,29 +115,32 @@ const AiPet = () => {
     }]);
 
     try {
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
+      const endpoint = currentImage
+        ? `${API_BASE}/public/ai-consult-image`
+        : `${API_BASE}/public/ai-consult`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer sk-c0b9488d8daf48099f9ee40edd21f541`
         },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: "你是一个专业的医疗AI助手，专注于骨龄预测、儿童生长发育和健康咨询。回答要专业、准确、友好。如果用户发送了图片，请基于图片内容进行分析。" },
-            ...messages.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content })),
-            { 
-              role: "user", 
-              content: currentImage 
-                ? `[用户发送了一张图片]\n${currentInput || '请分析这张图片'}` 
-                : currentInput 
-            }
-          ],
-          stream: true
-        })
+        body: JSON.stringify(
+          currentImage
+            ? {
+                message: currentInput || '',
+                image_base64: currentImage,
+                history,
+              }
+            : {
+                message: currentInput,
+                history,
+              }
+        ),
       });
 
-      if (!response.ok) throw new Error('API_ERROR');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'AI 调用失败');
+      }
       
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -150,7 +161,10 @@ const AiPet = () => {
 
               try {
                 const json = JSON.parse(data);
-                const content = json.choices?.[0]?.delta?.content;
+                if (json.error) {
+                  throw new Error(json.error);
+                }
+                const content = json.content;
                 if (content) {
                   fullContent += content;
                   setMessages(prev => {
@@ -162,7 +176,10 @@ const AiPet = () => {
                   });
                 }
               } catch (e) {
-                console.error('解析流数据失败:', e);
+                const error = e as Error;
+                if (error.message && !error.message.includes('JSON')) {
+                  throw error;
+                }
               }
             }
           }

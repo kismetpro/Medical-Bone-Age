@@ -70,6 +70,10 @@ const getRUSCHNFormula = (gender: 'male' | 'female') => {
     }
 };
 
+const roundCoord = (value: number) => (
+    Number.isFinite(value) ? Math.round(value) : 0
+);
+
 const FormulaMethodTab: React.FC<FormulaMethodTabProps> = ({ 
     setResult,
     patientUsers = [], patientsLoading = false,
