@@ -26,3 +26,4 @@ __pycache__/
 
 .backend.pid
 .frontend.pid
+.pytest-temp/
